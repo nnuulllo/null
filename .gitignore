@@ -16,20 +16,32 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 -- AUTO-REEXECUTE (QUEUE ON TELEPORT)
 --------------------------------------------------
 
-local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
-if queueOnTeleport then
-    queueOnTeleport([[
-        task.wait(1)
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))()
-    ]])
+local function SetupAutoExecute()
+    local queueOnTeleport = (syn and syn.queue_on_teleport) 
+        or queue_on_teleport 
+        or (fluxus and fluxus.queue_on_teleport)
+    
+    if queueOnTeleport then
+        -- Данный код сработает на новом месте при телепортации
+        local scriptUrl = "https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"
+        queueOnTeleport(string.format([[
+            repeat task.wait() until game:IsLoaded()
+            pcall(function()
+                loadstring(game:HttpGet("%s"))()
+            end)
+        ]], scriptUrl))
+    end
 end
+
+-- Регистрируем автозапуск для следующего телепорта
+SetupAutoExecute()
 
 --------------------------------------------------
 -- CONFIGURATION & FILE SYSTEM
 --------------------------------------------------
 
 local CONFIG_FOLDER = "VisionHUD_Configs"
-local AUTOLOAD_FILE = "autoload.json"
+local AUTOSAVE_FILE = "autorun"
 local UI_BINDINGS = {}
 
 local CONFIG = {
@@ -164,38 +176,6 @@ local function LoadConfigFile(name)
     end
 end
 
-local function SaveAutoConfig()
-    if writefile then
-        local filePath = CONFIG_FOLDER .. "/" .. AUTOLOAD_FILE
-        pcall(function()
-            writefile(filePath, SerializeConfig())
-        end)
-    end
-end
-
-local function LoadAutoConfig()
-    if readfile and isfile then
-        local filePath = CONFIG_FOLDER .. "/" .. AUTOLOAD_FILE
-        if isfile(filePath) then
-            pcall(function()
-                local content = readfile(filePath)
-                DeserializeConfig(content)
-            end)
-        end
-    end
-end
-
--- Автоматическое сохранение при выходе и телепортации
-game:BindToClose(function()
-    SaveAutoConfig()
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    if player == LocalPlayer then
-        SaveAutoConfig()
-    end
-end)
-
 local function DeleteConfigFile(name)
     if delfile and isfile then
         local filePath = CONFIG_FOLDER .. "/" .. name .. ".json"
@@ -215,7 +195,7 @@ local function GetConfigList()
         if success and files then
             for _, path in ipairs(files) do
                 local filename = path:match("([^/\\]+)%.json$")
-                if filename and filename ~= "autoload" then
+                if filename then
                     table.insert(list, filename)
                 end
             end
@@ -223,6 +203,30 @@ local function GetConfigList()
     end
     return list
 end
+
+--------------------------------------------------
+-- AUTO SAVE & LOAD HOOKS
+--------------------------------------------------
+
+-- Автозагрузка конфига при включении скрипта
+task.spawn(function()
+    LoadConfigFile(AUTOSAVE_FILE)
+end)
+
+local function AutoSave()
+    SaveConfigFile(AUTOSAVE_FILE)
+end
+
+-- Автосохранение при телепортации
+TeleportService.TeleportInitFailed:Connect(AutoSave)
+if LocalPlayer then
+    LocalPlayer.OnTeleport:Connect(function()
+        AutoSave()
+    end)
+end
+
+-- Автосохранение при выходе из игры
+game:BindToClose(AutoSave)
 
 --------------------------------------------------
 -- GUI BUILD & BASE STRUCTURE
@@ -447,6 +451,7 @@ local function UpdateColorFromHSV()
     if currentActivePreviewBtn then
         currentActivePreviewBtn.BackgroundColor3 = color
     end
+    AutoSave()
 end
 
 local draggingCanvas, draggingHue, draggingVS = false, false, false
@@ -695,6 +700,7 @@ local function CreateToggle(parent, text, configKey)
         TweenService:Create(button, TweenInfo.new(0.2), {
             BackgroundColor3 = CONFIG[configKey] and Color3.fromRGB(60, 200, 100) or Color3.fromRGB(50, 50, 60)
         }):Play()
+        AutoSave()
     end)
 
     UI_BINDINGS[configKey] = {
@@ -761,6 +767,7 @@ local function CreateKeybind(parent, text, configKey)
             end
             button.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
             listening = false
+            AutoSave()
             conn:Disconnect()
         end)
     end)
@@ -819,6 +826,7 @@ local function CreateDropdown(parent, text, options, configKey)
         local selected = options[currentIndex]
         CONFIG[configKey] = selected
         button.Text = tostring(selected)
+        AutoSave()
     end)
 
     UI_BINDINGS[configKey] = {
@@ -898,6 +906,7 @@ local function CreateSlider(parent, text, min, max, configKey)
     UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             isSliding = false
+            AutoSave()
         end
     end)
 
@@ -1039,6 +1048,7 @@ local function RefreshConfigListUI(container)
 
         loadBtn.MouseButton1Click:Connect(function()
             LoadConfigFile(name)
+            AutoSave()
         end)
 
         delBtn.MouseButton1Click:Connect(function()
@@ -1150,9 +1160,6 @@ CreateSlider(AimPage, "FOV Radius", 30, 500, "AimFOV")
 CreateSlider(AimPage, "Smoothness", 1, 20, "AimSmoothness")
 
 BuildConfigTab(ConfigPage)
-
--- Загружаем сохраненный авто-конфиг при запуске
-LoadAutoConfig()
 
 --------------------------------------------------
 -- TEAM & WALL CHECK UTILITIES
@@ -1470,7 +1477,7 @@ RunService.RenderStepped:Connect(function(dt)
                                 data.HealthBg.Visible = false
                             end
 
-                            -- Update Names & Distance (Meters rounded to tens: 10m, 20m, 30m...)
+                            -- Update Names & Distance
                             if CONFIG.ShowNames then
                                 data.Name.Visible = true
                                 data.Name.Text = player.DisplayName
