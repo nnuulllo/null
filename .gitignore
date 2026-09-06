@@ -1,4 +1,4 @@
---// VISION HUD ESP & AIMBOT (METERS & MOUSEMOVEREL & TEAM/WALL CHECK & GITHUB AUTOLOAD)
+--// VISION HUD ESP & AIMBOT (METERS & MOUSEMOVEREL & TEAM/WALL CHECK)
 --// LocalScript -> StarterPlayerScripts / StarterGui
 
 local Players = game:GetService("Players")
@@ -6,23 +6,33 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 --------------------------------------------------
+-- AUTO-REEXECUTE (QUEUE ON TELEPORT)
+--------------------------------------------------
+
+local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+if queueOnTeleport then
+    queueOnTeleport([[
+        task.wait(1)
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))()
+    ]])
+end
+
+--------------------------------------------------
 -- CONFIGURATION & FILE SYSTEM
 --------------------------------------------------
 
 local CONFIG_FOLDER = "VisionHUD_Configs"
+local AUTOLOAD_FILE = "autoload.json"
 local UI_BINDINGS = {}
 
 local CONFIG = {
-    -- Auto Load GitHub Config Settings
-    AutoLoadGitHub = true,
-    GitHubConfigURL = "https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore",
-
     -- ESP Toggles
     ESPEnabled = true,
     ShowBoxes = true,
@@ -133,18 +143,6 @@ local function DeserializeConfig(jsonStr)
     RefreshUIComponents()
 end
 
-local function LoadConfigFromGitHub(url)
-    if not url or url == "" then return end
-    task.spawn(function()
-        local success, result = pcall(function()
-            return game:HttpGet(url)
-        end)
-        if success and result and #result > 0 then
-            DeserializeConfig(result)
-        end
-    end)
-end
-
 local function SaveConfigFile(name)
     if writefile then
         local filePath = CONFIG_FOLDER .. "/" .. name .. ".json"
@@ -166,6 +164,38 @@ local function LoadConfigFile(name)
     end
 end
 
+local function SaveAutoConfig()
+    if writefile then
+        local filePath = CONFIG_FOLDER .. "/" .. AUTOLOAD_FILE
+        pcall(function()
+            writefile(filePath, SerializeConfig())
+        end)
+    end
+end
+
+local function LoadAutoConfig()
+    if readfile and isfile then
+        local filePath = CONFIG_FOLDER .. "/" .. AUTOLOAD_FILE
+        if isfile(filePath) then
+            pcall(function()
+                local content = readfile(filePath)
+                DeserializeConfig(content)
+            end)
+        end
+    end
+end
+
+-- Автоматическое сохранение при выходе и телепортации
+game:BindToClose(function()
+    SaveAutoConfig()
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if player == LocalPlayer then
+        SaveAutoConfig()
+    end
+end)
+
 local function DeleteConfigFile(name)
     if delfile and isfile then
         local filePath = CONFIG_FOLDER .. "/" .. name .. ".json"
@@ -185,7 +215,7 @@ local function GetConfigList()
         if success and files then
             for _, path in ipairs(files) do
                 local filename = path:match("([^/\\]+)%.json$")
-                if filename then
+                if filename and filename ~= "autoload" then
                     table.insert(list, filename)
                 end
             end
@@ -1019,61 +1049,6 @@ local function RefreshConfigListUI(container)
 end
 
 local function BuildConfigTab(parent)
-    CreateToggle(parent, "Auto-Load GitHub Config", "AutoLoadGitHub")
-
-    local ghInputFrame = Instance.new("Frame")
-    ghInputFrame.Size = UDim2.new(1, -10, 0, 36)
-    ghInputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-    ghInputFrame.BorderSizePixel = 0
-    ghInputFrame.Parent = parent
-
-    local ghInputCorner = Instance.new("UICorner")
-    ghInputCorner.CornerRadius = UDim.new(0, 6)
-    ghInputCorner.Parent = ghInputFrame
-
-    local ghTextBox = Instance.new("TextBox")
-    ghTextBox.Size = UDim2.new(0.7, -10, 1, -10)
-    ghTextBox.Position = UDim2.new(0, 10, 0, 5)
-    ghTextBox.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-    ghTextBox.BorderSizePixel = 0
-    ghTextBox.Font = Enum.Font.Gotham
-    ghTextBox.PlaceholderText = "GitHub Raw URL..."
-    ghTextBox.Text = CONFIG.GitHubConfigURL or ""
-    ghTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ghTextBox.TextSize = 10
-    ghTextBox.ClearTextOnFocus = false
-    ghTextBox.Parent = ghInputFrame
-
-    local ghTbCorner = Instance.new("UICorner")
-    ghTbCorner.CornerRadius = UDim.new(0, 4)
-    ghTbCorner.Parent = ghTextBox
-
-    ghTextBox.FocusLost:Connect(function()
-        CONFIG.GitHubConfigURL = ghTextBox.Text
-    end)
-
-    local ghLoadBtn = Instance.new("TextButton")
-    ghLoadBtn.Size = UDim2.new(0.3, -10, 1, -10)
-    ghLoadBtn.Position = UDim2.new(0.7, 5, 0, 5)
-    ghLoadBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 220)
-    ghLoadBtn.BorderSizePixel = 0
-    ghLoadBtn.Font = Enum.Font.GothamBold
-    ghLoadBtn.Text = "FETCH URL"
-    ghLoadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ghLoadBtn.TextSize = 10
-    ghLoadBtn.Parent = ghInputFrame
-
-    local ghCbCorner = Instance.new("UICorner")
-    ghCbCorner.CornerRadius = UDim.new(0, 4)
-    ghCbCorner.Parent = ghLoadBtn
-
-    ghLoadBtn.MouseButton1Click:Connect(function()
-        if ghTextBox.Text ~= "" then
-            CONFIG.GitHubConfigURL = ghTextBox.Text
-            LoadConfigFromGitHub(ghTextBox.Text)
-        end
-    end)
-
     local inputFrame = Instance.new("Frame")
     inputFrame.Size = UDim2.new(1, -10, 0, 36)
     inputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
@@ -1175,6 +1150,9 @@ CreateSlider(AimPage, "FOV Radius", 30, 500, "AimFOV")
 CreateSlider(AimPage, "Smoothness", 1, 20, "AimSmoothness")
 
 BuildConfigTab(ConfigPage)
+
+-- Загружаем сохраненный авто-конфиг при запуске
+LoadAutoConfig()
 
 --------------------------------------------------
 -- TEAM & WALL CHECK UTILITIES
@@ -1416,11 +1394,6 @@ Players.PlayerRemoving:Connect(RemoveESP)
 
 for _, player in ipairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then CreateESP(player) end
-end
-
--- Auto Load configuration from GitHub URL on init
-if CONFIG.AutoLoadGitHub and CONFIG.GitHubConfigURL ~= "" then
-    LoadConfigFromGitHub(CONFIG.GitHubConfigURL)
 end
 
 RunService.RenderStepped:Connect(function(dt)
