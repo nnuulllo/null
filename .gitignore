@@ -1477,7 +1477,7 @@ local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or 
 if queueOnTeleport then
     local currentScriptSource = [[
         -- Перезапуск Vision HUD после телепортации
-        local scriptUrl = "https://raw.githubusercontent.com/.../script.lua" -- укажите сылку если загружаете из GitHub
+        local scriptUrl = "https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore" -- укажите сылку если загружаете из GitHub
     ]]
     
     -- Регистрируем запуск при следующем телепорте
