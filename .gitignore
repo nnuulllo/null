@@ -1,4 +1,4 @@
---// VISION HUD ESP & AIMBOT (METERS & MOUSEMOVEREL & TEAM/WALL CHECK)
+--// VISION HUD ESP & AIMBOT (XENO & AUTO-EXECUTE SUPPORT)
 --// LocalScript -> StarterPlayerScripts / StarterGui
 
 local Players = game:GetService("Players")
@@ -11,6 +11,27 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+--------------------------------------------------
+-- AUTO TELEPORT QUEUE & XENO COMPATIBILITY
+--------------------------------------------------
+local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or queueonteleport
+local mouseMoveRel = mousemoverel or (Input and Input.MouseMoveRel)
+
+-- Клонирование скрипта в очередь при телепортации
+if queueOnTeleport then
+    LocalPlayer.OnTeleport:Connect(function(State)
+        if State == Enum.TeleportState.Started or State == Enum.TeleportState.InProgress then
+            local scriptSource = [[
+                repeat task.wait() until game:IsLoaded()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))() -- Вставьте сюда ссылку на скрипт (если используете GitHub/Pastebin)
+            ]]
+            -- Если скрипт запускается локально без гет-запроса:
+            -- queueOnTeleport(game:HttpGet("https://raw.githubusercontent.com/...") or [[ ...code... ]])
+            pcall(queueOnTeleport, scriptSource)
+        end
+    end)
+end
 
 --------------------------------------------------
 -- CONFIGURATION & FILE SYSTEM
@@ -65,7 +86,7 @@ local CONFIG = {
 
 local aimToggleState = false
 
-if makefolder and not isfolder(CONFIG_FOLDER) then
+if makefolder and not (isfolder and isfolder(CONFIG_FOLDER)) then
     pcall(makefolder, CONFIG_FOLDER)
 end
 
@@ -188,7 +209,17 @@ ScreenGui.Name = "VisionHUD_" .. math.random(1000, 9999)
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = PlayerGui
+
+pcall(function()
+    if gethui then
+        ScreenGui.Parent = gethui()
+    elseif syn and syn.protect_gui then
+        syn.protect_gui(ScreenGui)
+        ScreenGui.Parent = PlayerGui
+    else
+        ScreenGui.Parent = PlayerGui
+    end
+end)
 
 local ESPFolder = Instance.new("Folder")
 ESPFolder.Name = "VisionESP"
@@ -248,7 +279,7 @@ MenuTitle.Size = UDim2.new(1, -20, 1, 0)
 MenuTitle.Position = UDim2.new(0, 12, 0, 0)
 MenuTitle.BackgroundTransparency = 1
 MenuTitle.Font = Enum.Font.GothamBold
-MenuTitle.Text = "VISION HUD // MOUSEMOVEREL + WALL/TEAM CHECK"
+MenuTitle.Text = "VISION HUD // XENO & AUTO-REEXECUTE"
 MenuTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 MenuTitle.TextSize = 11
 MenuTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -1124,7 +1155,7 @@ local function IsVisible(targetPart, character)
     local direction = (targetPart.Position - origin)
     
     local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
     
     local filterList = {LocalPlayer.Character}
     if character then
@@ -1372,8 +1403,8 @@ RunService.RenderStepped:Connect(function(dt)
                     local targetVector = Vector2.new(screenPos.X, screenPos.Y) - mousePos
                     local smoothFactor = math.max(CONFIG.AimSmoothness, 1)
                     
-                    if mousemoverel then
-                        mousemoverel(targetVector.X / smoothFactor, targetVector.Y / smoothFactor)
+                    if mouseMoveRel then
+                        mouseMoveRel(targetVector.X / smoothFactor, targetVector.Y / smoothFactor)
                     end
                 end
             end
@@ -1422,7 +1453,7 @@ RunService.RenderStepped:Connect(function(dt)
                                 data.HealthBg.Visible = false
                             end
 
-                            -- Update Names & Distance
+                            -- Update Names & Distance (Meters rounded to tens)
                             if CONFIG.ShowNames then
                                 data.Name.Visible = true
                                 data.Name.Text = player.DisplayName
@@ -1467,32 +1498,3 @@ RunService.RenderStepped:Connect(function(dt)
         end
     end
 end)
-
---------------------------------------------------
--- AUTO RE-EXECUTE ON TELEPORT / PLACE CHANGE
---------------------------------------------------
-
-local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
-
-if queueOnTeleport then
-    local currentScriptSource = [[
-        -- Перезапуск Vision HUD после телепортации
-        local scriptUrl = "https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore" -- укажите сылку если загружаете из GitHub
-    ]]
-    
-    -- Регистрируем запуск при следующем телепорте
-    TeleportService.TeleportInitFailed:Connect(function() end)
-    
-    LocalPlayer.OnTeleport:Connect(function(State)
-        if State == Enum.TeleportState.Started or State == Enum.TeleportState.InProgress then
-            pcall(function()
-                queueOnTeleport([[
-                    if not game:IsLoaded() then
-                        game.Loaded:Wait()
-                    end
-                    -- Повторный вызов логики HUD
-                ]])
-            end)
-        end
-    end)
-end
