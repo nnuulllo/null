@@ -1,4 +1,4 @@
---// VISION HUD ESP & AIMBOT (METERS & MOUSEMOVEREL & TEAM/WALL CHECK)
+[source: 1]--// VISION HUD ESP & AIMBOT (METERS & MOUSEMOVEREL & TEAM/WALL CHECK)
 --// LocalScript -> StarterPlayerScripts / StarterGui
 
 local Players = game:GetService("Players")
@@ -247,7 +247,7 @@ MenuTitle.Size = UDim2.new(1, -20, 1, 0)
 MenuTitle.Position = UDim2.new(0, 12, 0, 0)
 MenuTitle.BackgroundTransparency = 1
 MenuTitle.Font = Enum.Font.GothamBold
-MenuTitle.Text = "VISION HUD // MOUSEMOVEREL + WALL/TEAM CHECK"
+MenuTitle.Text = "VISION HUD // GITHUB CONFIG SUPPORT"
 MenuTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 MenuTitle.TextSize = 11
 MenuTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -927,12 +927,12 @@ local function CreateColorPicker(parent, text, configKey)
 end
 
 --------------------------------------------------
--- CONFIG SYSTEM UI
+-- CONFIG SYSTEM UI (WITH GITHUB AUTOLOAD)
 --------------------------------------------------
 
 local function RefreshConfigListUI(container)
     for _, child in ipairs(container:GetChildren()) do
-        if child:IsA("Frame") and child.Name == "ConfigItemFrame" then
+        if child:IsA("Frame") and (child.Name == "ConfigItemFrame" or child.Name == "GithubItemFrame") then
             child:Destroy()
         end
     end
@@ -1003,6 +1003,7 @@ local function RefreshConfigListUI(container)
 end
 
 local function BuildConfigTab(parent)
+    -- Поле для сохранения обычного конфига
     local inputFrame = Instance.new("Frame")
     inputFrame.Size = UDim2.new(1, -10, 0, 36)
     inputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
@@ -1044,6 +1045,64 @@ local function BuildConfigTab(parent)
     cbCorner.CornerRadius = UDim.new(0, 4)
     cbCorner.Parent = createBtn
 
+    -- Поле для загрузки конфига с GitHub по ссылке
+    local githubFrame = Instance.new("Frame")
+    githubFrame.Size = UDim2.new(1, -10, 0, 70)
+    githubFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    githubFrame.BorderSizePixel = 0
+    githubFrame.Parent = parent
+
+    local ghCorner = Instance.new("UICorner")
+    ghCorner.CornerRadius = UDim.new(0, 6)
+    ghCorner.Parent = githubFrame
+
+    local urlBox = Instance.new("TextBox")
+    urlBox.Size = UDim2.new(1, -20, 0, 26)
+    urlBox.Position = UDim2.new(0, 10, 0, 8)
+    urlBox.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+    urlBox.BorderSizePixel = 0
+    urlBox.Font = Enum.Font.Gotham
+    urlBox.PlaceholderText = "Paste raw GitHub URL (.json)..."
+    urlBox.Text = "https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore" -- Установлен ваш дефолтный шаблон
+    urlBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    urlBox.TextSize = 10
+    urlBox.Parent = githubFrame
+
+    local ubCorner = Instance.new("UICorner")
+    ubCorner.CornerRadius = UDim.new(0, 4)
+    ubCorner.Parent = urlBox
+
+    local githubNameBox = Instance.new("TextBox")
+    githubNameBox.Size = UDim2.new(0.5, -12, 0, 26)
+    githubNameBox.Position = UDim2.new(0, 10, 0, 38)
+    githubNameBox.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+    githubNameBox.BorderSizePixel = 0
+    githubNameBox.Font = Enum.Font.Gotham
+    githubNameBox.PlaceholderText = "Save Name..."
+    githubNameBox.Text = "github_config"
+    githubNameBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    githubNameBox.TextSize = 10
+    githubNameBox.Parent = githubFrame
+
+    local gnbCorner = Instance.new("UICorner")
+    gnbCorner.CornerRadius = UDim.new(0, 4)
+    gnbCorner.Parent = githubNameBox
+
+    local fetchBtn = Instance.new("TextButton")
+    fetchBtn.Size = UDim2.new(0.5, -12, 0, 26)
+    fetchBtn.Position = UDim2.new(0.5, 2, 0, 38)
+    fetchBtn.BackgroundColor3 = Color3.fromRGB(150, 80, 220)
+    fetchBtn.BorderSizePixel = 0
+    fetchBtn.Font = Enum.Font.GothamBold
+    fetchBtn.Text = "FETCH & LOAD"
+    fetchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    fetchBtn.TextSize = 9
+    fetchBtn.Parent = githubFrame
+
+    local fbCorner = Instance.new("UICorner")
+    fbCorner.CornerRadius = UDim.new(0, 4)
+    fbCorner.Parent = fetchBtn
+
     local listContainer = Instance.new("Frame")
     listContainer.Name = "ListContainer"
     listContainer.Size = UDim2.new(1, 0, 0, 0)
@@ -1062,6 +1121,29 @@ local function BuildConfigTab(parent)
             SaveConfigFile(name)
             textBox.Text = ""
             RefreshConfigListUI(listContainer)
+        end
+    end)
+
+    fetchBtn.MouseButton1Click:Connect(function()
+        local url = urlBox.Text
+        local cfgName = githubNameBox.Text
+        if url and #url > 0 and cfgName and #cfgName > 0 then
+            local success, content = pcall(function()
+                return game:HttpGet(url)
+            end)
+            if success and content then
+                -- Сохраняем локально и сразу десериализуем
+                if writefile then
+                    local filePath = CONFIG_FOLDER .. "/" .. cfgName .. ".json"
+                    pcall(function()
+                        writefile(filePath, content)
+                    end)
+                end
+                DeserializeConfig(content)
+                RefreshConfigListUI(listContainer)
+            else
+                warn("Failed to fetch config from GitHub!")
+            end
         end
     end)
 
@@ -1134,7 +1216,6 @@ local function IsVisible(targetPart, character)
 
     local result = workspace:Raycast(origin, direction, raycastParams)
     if result then
-        -- Если луч задел персонажа цели или его дочерний объект, то цель видима
         if result.Instance:IsDescendantOf(character) then
             return true
         end
@@ -1413,7 +1494,7 @@ RunService.RenderStepped:Connect(function(dt)
 
                             -- Update Health Bars
                             if CONFIG.ShowHealth then
-                                data.HealthBg.Visible = true
+                                data.HealthBg.Visible =.true
                                 data.HealthFill.BackgroundColor3 = CONFIG.HealthBarColor
                                 data.HealthBg.BackgroundColor3 = CONFIG.HealthBarBg
                                 local healthPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
@@ -1422,7 +1503,7 @@ RunService.RenderStepped:Connect(function(dt)
                                 data.HealthBg.Visible = false
                             end
 
-                            -- Update Names & Distance (Meters rounded to tens: 10m, 20m, 30m...)
+                            -- Update Names & Distance
                             if CONFIG.ShowNames then
                                 data.Name.Visible = true
                                 data.Name.Text = player.DisplayName
