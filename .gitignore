@@ -6,7 +6,6 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -18,16 +17,13 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or queueonteleport
 local mouseMoveRel = mousemoverel or (Input and Input.MouseMoveRel)
 
--- Клонирование скрипта в очередь при телепортации
 if queueOnTeleport then
     LocalPlayer.OnTeleport:Connect(function(State)
         if State == Enum.TeleportState.Started or State == Enum.TeleportState.InProgress then
             local scriptSource = [[
                 repeat task.wait() until game:IsLoaded()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))() -- Вставьте сюда ссылку на скрипт (если используете GitHub/Pastebin)
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))()
             ]]
-            -- Если скрипт запускается локально без гет-запроса:
-            -- queueOnTeleport(game:HttpGet("https://raw.githubusercontent.com/...") or [[ ...code... ]])
             pcall(queueOnTeleport, scriptSource)
         end
     end)
@@ -38,6 +34,7 @@ end
 --------------------------------------------------
 
 local CONFIG_FOLDER = "VisionHUD_Configs"
+local LAST_CONFIG_FILE = CONFIG_FOLDER .. "/last_config.txt"
 local UI_BINDINGS = {}
 
 local CONFIG = {
@@ -57,9 +54,16 @@ local CONFIG = {
     FillColor = Color3.fromRGB(255, 70, 70),
     FillTransparency = 0.65,
 
-    -- Gradient Customization
+    -- ESP Gradient Customization
     UseGradient = false,
     GradientRotation = 90,
+
+    -- UI Main Frame Gradient & Transparency
+    UIGradientEnabled = true,
+    UIGradientRotation = 45,
+    UIGradientColor1 = Color3.fromRGB(28, 28, 38),
+    UIGradientColor2 = Color3.fromRGB(15, 15, 22),
+    UITransparency = 0,
 
     -- Text & Bar Customization
     HealthBarColor = Color3.fromRGB(80, 255, 120),
@@ -156,6 +160,7 @@ local function SaveConfigFile(name)
         local filePath = CONFIG_FOLDER .. "/" .. name .. ".json"
         pcall(function()
             writefile(filePath, SerializeConfig())
+            writefile(LAST_CONFIG_FILE, name)
         end)
     end
 end
@@ -167,8 +172,20 @@ local function LoadConfigFile(name)
             pcall(function()
                 local content = readfile(filePath)
                 DeserializeConfig(content)
+                writefile(LAST_CONFIG_FILE, name)
             end)
         end
+    end
+end
+
+local function AutoLoadLastConfig()
+    if readfile and isfile and isfile(LAST_CONFIG_FILE) then
+        pcall(function()
+            local lastName = readfile(LAST_CONFIG_FILE)
+            if lastName and #lastName > 0 then
+                LoadConfigFile(lastName)
+            end
+        end)
     end
 end
 
@@ -191,7 +208,7 @@ local function GetConfigList()
         if success and files then
             for _, path in ipairs(files) do
                 local filename = path:match("([^/\\]+)%.json$")
-                if filename then
+                if filename and filename ~= "last_config" then
                     table.insert(list, filename)
                 end
             end
@@ -249,18 +266,124 @@ local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 560, 0, 420)
 MainFrame.Position = UDim2.new(0.5, -280, 0.5, -210)
-MainFrame.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+MainFrame.BackgroundTransparency = 1
 MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = false
 MainFrame.Parent = ScreenGui
+
+local BackgroundFrame = Instance.new("Frame")
+BackgroundFrame.Name = "BackgroundFrame"
+BackgroundFrame.Size = UDim2.new(1, 0, 1, 0)
+BackgroundFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+BackgroundFrame.BorderSizePixel = 0
+BackgroundFrame.ClipsDescendants = true
+BackgroundFrame.Parent = MainFrame
+
+local MainScale = Instance.new("UIScale")
+MainScale.Scale = 1
+MainScale.Parent = MainFrame
+
+local MainGradient = Instance.new("UIGradient")
+MainGradient.Name = "UIMainGradient"
+MainGradient.Rotation = CONFIG.UIGradientRotation
+MainGradient.Color = ColorSequence.new(CONFIG.UIGradientColor1, CONFIG.UIGradientColor2)
+MainGradient.Enabled = CONFIG.UIGradientEnabled
+MainGradient.Parent = BackgroundFrame
 
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 10)
-MainCorner.Parent = MainFrame
+MainCorner.Parent = BackgroundFrame
 
 local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = Color3.fromRGB(40, 40, 50)
+MainStroke.Color = Color3.fromRGB(45, 45, 60)
 MainStroke.Thickness = 1.5
-MainStroke.Parent = MainFrame
+MainStroke.Parent = BackgroundFrame
+
+--------------------------------------------------
+-- INTERACTIVE DEFORMABLE GRID BACKGROUND
+--------------------------------------------------
+
+local GridCanvas = Instance.new("Frame")
+GridCanvas.Name = "GridCanvas"
+GridCanvas.Size = UDim2.new(1, 0, 1, 0)
+GridCanvas.BackgroundTransparency = 1
+GridCanvas.ClipsDescendants = true
+GridCanvas.ZIndex = 1
+GridCanvas.Parent = BackgroundFrame
+
+local gridRows, gridCols = 10, 14
+local gridNodes = {}
+
+for r = 0, gridRows do
+    gridNodes[r] = {}
+    for c = 0, gridCols do
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(2, 2)
+        dot.AnchorPoint = Vector2.new(0.5, 0.5)
+        dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        dot.BackgroundTransparency = 0.85
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 2
+        dot.Parent = GridCanvas
+
+        gridNodes[r][c] = {
+            Instance = dot,
+            BaseX = c / gridCols,
+            BaseY = r / gridRows,
+            CurrX = c / gridCols,
+            CurrY = r / gridRows
+        }
+    end
+end
+
+RunService.RenderStepped:Connect(function()
+    if not MainFrame.Visible then return end
+    local mousePos = UserInputService:GetMouseLocation()
+    local frameAbsPos = BackgroundFrame.AbsolutePosition
+    local frameAbsSize = BackgroundFrame.AbsoluteSize
+
+    local relMouse = Vector2.new(mousePos.X - frameAbsPos.X, mousePos.Y - frameAbsPos.Y)
+
+    for r = 0, gridRows do
+        for c = 0, gridCols do
+            local node = gridNodes[r][c]
+            local baseX = node.BaseX * frameAbsSize.X
+            local baseY = node.BaseY * frameAbsSize.Y
+
+            local dir = Vector2.new(baseX - relMouse.X, baseY - relMouse.Y)
+            local dist = dir.Magnitude
+            local maxDist = 120
+
+            local offsetX, offsetY = 0, 0
+            if dist < maxDist and dist > 0 then
+                local force = (1 - (dist / maxDist))^2 * 25
+                local norm = dir.Unit
+                offsetX = norm.X * force
+                offsetY = norm.Y * force
+            end
+
+            local targetX = (baseX + offsetX) / frameAbsSize.X
+            local targetY = (baseY + offsetY) / frameAbsSize.Y
+
+            node.CurrX = node.CurrX + (targetX - node.CurrX) * 0.2
+            node.CurrY = node.CurrY + (targetY - node.CurrY) * 0.2
+
+            node.Instance.Position = UDim2.new(node.CurrX, 0, node.CurrY, 0)
+        end
+    end
+end)
+
+local function UpdateUIGradient()
+    MainGradient.Enabled = CONFIG.UIGradientEnabled
+    MainGradient.Rotation = CONFIG.UIGradientRotation
+    MainGradient.Color = ColorSequence.new(CONFIG.UIGradientColor1, CONFIG.UIGradientColor2)
+    BackgroundFrame.BackgroundTransparency = CONFIG.UITransparency
+    if not CONFIG.UIGradientEnabled then
+        BackgroundFrame.BackgroundColor3 = CONFIG.UIGradientColor1
+    else
+        BackgroundFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end
 
 -- Topbar
 local Topbar = Instance.new("Frame")
@@ -268,7 +391,8 @@ Topbar.Name = "Topbar"
 Topbar.Size = UDim2.new(1, 0, 0, 35)
 Topbar.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 Topbar.BorderSizePixel = 0
-Topbar.Parent = MainFrame
+Topbar.ZIndex = 5
+Topbar.Parent = BackgroundFrame
 
 local TopbarCorner = Instance.new("UICorner")
 TopbarCorner.CornerRadius = UDim.new(0, 10)
@@ -283,6 +407,7 @@ MenuTitle.Text = "VISION HUD // XENO & AUTO-REEXECUTE"
 MenuTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 MenuTitle.TextSize = 11
 MenuTitle.TextXAlignment = Enum.TextXAlignment.Left
+MenuTitle.ZIndex = 6
 MenuTitle.Parent = Topbar
 
 --------------------------------------------------
@@ -317,7 +442,7 @@ local Canvas = Instance.new("ImageButton")
 Canvas.Name = "Canvas"
 Canvas.Size = UDim2.new(1, -20, 0, 110)
 Canvas.Position = UDim2.new(0, 10, 0, 25)
-Canvas.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+Canvas.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Canvas.AutoButtonColor = false
 Canvas.BorderSizePixel = 0
 Canvas.ZIndex = 101
@@ -328,27 +453,46 @@ CanvasCorner.CornerRadius = UDim.new(0, 4)
 CanvasCorner.Parent = Canvas
 
 local CanvasGradientH = Instance.new("UIGradient")
-CanvasGradientH.Color = ColorSequence.new(Color3.new(1,1,1), Color3.new(1,1,1))
-CanvasGradientH.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1)})
+CanvasGradientH.Color = ColorSequence.new(Color3.new(1,1,1), Color3.fromHSV(0, 1, 1))
+CanvasGradientH.Transparency = NumberSequence.new(0, 0)
 CanvasGradientH.Parent = Canvas
 
+local CanvasGradientVFrame = Instance.new("Frame")
+CanvasGradientVFrame.Size = UDim2.new(1, 0, 1, 0)
+CanvasGradientVFrame.BackgroundTransparency = 0
+CanvasGradientVFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+CanvasGradientVFrame.BorderSizePixel = 0
+CanvasGradientVFrame.ZIndex = 101
+CanvasGradientVFrame.Parent = Canvas
+
+local VFrameCorner = Instance.new("UICorner")
+VFrameCorner.CornerRadius = UDim.new(0, 4)
+VFrameCorner.Parent = CanvasGradientVFrame
+
 local CanvasGradientV = Instance.new("UIGradient")
-CanvasGradientV.Color = ColorSequence.new(Color3.new(0,0,0), Color3.new(0,0,0))
 CanvasGradientV.Rotation = 90
-CanvasGradientV.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)})
-CanvasGradientV.Parent = Canvas
+CanvasGradientV.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 1),
+    NumberSequenceKeypoint.new(1, 0)
+})
+CanvasGradientV.Parent = CanvasGradientVFrame
 
 local CanvasCursor = Instance.new("Frame")
 CanvasCursor.Size = UDim2.new(0, 8, 0, 8)
 CanvasCursor.AnchorPoint = Vector2.new(0.5, 0.5)
 CanvasCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 CanvasCursor.BorderSizePixel = 0
-CanvasCursor.ZIndex = 102
+CanvasCursor.ZIndex = 103
 CanvasCursor.Parent = Canvas
 
 local CursorCorner = Instance.new("UICorner")
 CursorCorner.CornerRadius = UDim.new(1, 0)
 CursorCorner.Parent = CanvasCursor
+
+local CursorStroke = Instance.new("UIStroke")
+CursorStroke.Color = Color3.fromRGB(0, 0, 0)
+CursorStroke.Thickness = 1
+CursorStroke.Parent = CanvasCursor
 
 local HueSlider = Instance.new("Frame")
 HueSlider.Size = UDim2.new(1, -20, 0, 12)
@@ -425,10 +569,13 @@ local currentActivePreviewBtn = nil
 local pickerH, pickerS, pickerV = 0, 1, 1
 
 local function UpdateColorFromHSV()
-    Canvas.BackgroundColor3 = Color3.fromHSV(pickerH, 1, 1)
+    CanvasGradientH.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromHSV(pickerH, 1, 1))
     local color = Color3.fromHSV(pickerH, pickerS, pickerV)
     if currentActiveColorKey then
         CONFIG[currentActiveColorKey] = color
+        if currentActiveColorKey:sub(1, 10) == "UIGradient" then
+            UpdateUIGradient()
+        end
     end
     if currentActivePreviewBtn then
         currentActivePreviewBtn.BackgroundColor3 = color
@@ -503,45 +650,76 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 --------------------------------------------------
--- DRAG & TOGGLE FOR MAIN WINDOW
+-- SMOOTH DRAGGING FOR MAIN WINDOW
 --------------------------------------------------
 
-local dragging, dragInput, dragStart, startPos
+local dragging = false
+local dragStartPos = Vector3.new()
+local frameStartPos = UDim2.new()
+local targetPosition = MainFrame.Position
 
 Topbar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
-
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
+        dragStartPos = input.Position
+        frameStartPos = MainFrame.Position
     end
 end)
 
-Topbar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        dragInput = input
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStartPos
+        targetPosition = UDim2.new(
+            frameStartPos.X.Scale,
+            frameStartPos.X.Offset + delta.X,
+            frameStartPos.Y.Scale,
+            frameStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+RunService.RenderStepped:Connect(function(dt)
+    if MainFrame.Visible then
+        MainFrame.Position = MainFrame.Position:Lerp(targetPosition, math.clamp(dt * 18, 0, 1))
     end
 end)
 
 local menuVisible = true
+local isAnimating = false
+
+local function ToggleMenu()
+    if isAnimating then return end
+    isAnimating = true
+    
+    if menuVisible then
+        ColorPickerFrame.Visible = false
+        TweenService:Create(MainScale, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Scale = 0.8}):Play()
+        local fadeTween = TweenService:Create(BackgroundFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {BackgroundTransparency = 1})
+        fadeTween:Play()
+        fadeTween.Completed:Wait()
+        MainFrame.Visible = false
+        menuVisible = false
+    else
+        MainFrame.Visible = true
+        BackgroundFrame.BackgroundTransparency = CONFIG.UITransparency
+        MainScale.Scale = 0.8
+        TweenService:Create(MainScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+        menuVisible = true
+    end
+    
+    isAnimating = false
+end
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Insert then
-        menuVisible = not menuVisible
-        MainFrame.Visible = menuVisible
-        if not menuVisible then ColorPickerFrame.Visible = false end
+        ToggleMenu()
     end
     
     if CONFIG.AimEnabled and CONFIG.AimMode == "Toggle" then
@@ -564,13 +742,17 @@ Sidebar.Size = UDim2.new(0, 120, 1, -35)
 Sidebar.Position = UDim2.new(0, 0, 0, 35)
 Sidebar.BackgroundColor3 = Color3.fromRGB(19, 19, 24)
 Sidebar.BorderSizePixel = 0
-Sidebar.Parent = MainFrame
+Sidebar.ZIndex = 5
+Sidebar.Parent = BackgroundFrame
 
 local TabContainer = Instance.new("Frame")
 TabContainer.Size = UDim2.new(1, -130, 1, -45)
 TabContainer.Position = UDim2.new(0, 125, 0, 40)
 TabContainer.BackgroundTransparency = 1
-TabContainer.Parent = MainFrame
+TabContainer.ZIndex = 5
+TabContainer.Parent = BackgroundFrame
+
+local currentTabBtn = nil
 
 local function CreateTabBtn(text, pos)
     local btn = Instance.new("TextButton")
@@ -580,13 +762,26 @@ local function CreateTabBtn(text, pos)
     btn.BorderSizePixel = 0
     btn.Font = Enum.Font.GothamBold
     btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextColor3 = Color3.fromRGB(180, 180, 200)
     btn.TextSize = 10
+    btn.ZIndex = 6
     btn.Parent = Sidebar
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
+
+    btn.MouseEnter:Connect(function()
+        if currentTabBtn ~= btn then
+            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(38, 38, 50), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+        end
+    end)
+
+    btn.MouseLeave:Connect(function()
+        if currentTabBtn ~= btn then
+            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(28, 28, 36), TextColor3 = Color3.fromRGB(180, 180, 200)}):Play()
+        end
+    end)
 
     return btn
 end
@@ -605,6 +800,7 @@ local function CreatePage()
     page.ScrollBarThickness = 3
     page.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 90)
     page.Visible = false
+    page.ZIndex = 6
     page.Parent = TabContainer
 
     local layout = Instance.new("UIListLayout")
@@ -621,32 +817,42 @@ local ColorsPage = CreatePage()
 local AimPage = CreatePage()
 local ConfigPage = CreatePage()
 
-ESPMainPage.Visible = true
-
-local function SwitchTab(targetPage)
+local function SwitchTab(targetPage, targetBtn)
     ESPMainPage.Visible = false
     ESPStylePage.Visible = false
     ColorsPage.Visible = false
     AimPage.Visible = false
     ConfigPage.Visible = false
+
+    for _, child in ipairs(Sidebar:GetChildren()) do
+        if child:IsA("TextButton") then
+            TweenService:Create(child, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(28, 28, 36), TextColor3 = Color3.fromRGB(180, 180, 200)}):Play()
+        end
+    end
+
+    currentTabBtn = targetBtn
+    TweenService:Create(targetBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 120, 220), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
     targetPage.Visible = true
 end
 
-ESPMainBtn.MouseButton1Click:Connect(function() SwitchTab(ESPMainPage) end)
-ESPStyleBtn.MouseButton1Click:Connect(function() SwitchTab(ESPStylePage) end)
-ColorsBtn.MouseButton1Click:Connect(function() SwitchTab(ColorsPage) end)
-AimTabBtn.MouseButton1Click:Connect(function() SwitchTab(AimPage) end)
-ConfigTabBtn.MouseButton1Click:Connect(function() SwitchTab(ConfigPage) end)
+ESPMainBtn.MouseButton1Click:Connect(function() SwitchTab(ESPMainPage, ESPMainBtn) end)
+ESPStyleBtn.MouseButton1Click:Connect(function() SwitchTab(ESPStylePage, ESPStyleBtn) end)
+ColorsBtn.MouseButton1Click:Connect(function() SwitchTab(ColorsPage, ColorsBtn) end)
+AimTabBtn.MouseButton1Click:Connect(function() SwitchTab(AimPage, AimTabBtn) end)
+ConfigTabBtn.MouseButton1Click:Connect(function() SwitchTab(ConfigPage, ConfigTabBtn) end)
+
+SwitchTab(ESPMainPage, ESPMainBtn)
 
 --------------------------------------------------
--- UI COMPONENT CREATORS
+-- UI COMPONENT CREATORS (WITH ANIMATED TOGGLE CIRCLE)
 --------------------------------------------------
 
-local function CreateToggle(parent, text, configKey)
+local function CreateToggle(parent, text, configKey, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 32)
     frame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     frame.BorderSizePixel = 0
+    frame.ZIndex = 6
     frame.Parent = parent
 
     local corner = Instance.new("UICorner")
@@ -662,32 +868,54 @@ local function CreateToggle(parent, text, configKey)
     label.TextColor3 = Color3.fromRGB(200, 200, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 7
     label.Parent = frame
 
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0, 38, 0, 18)
-    button.Position = UDim2.new(1, -48, 0.5, -9)
-    button.BackgroundColor3 = CONFIG[configKey] and Color3.fromRGB(60, 200, 100) or Color3.fromRGB(50, 50, 60)
-    button.BorderSizePixel = 0
-    button.Text = ""
-    button.Parent = frame
+    -- Переключатель Трек
+    local switchTrack = Instance.new("TextButton")
+    switchTrack.Size = UDim2.new(0, 42, 0, 20)
+    switchTrack.Position = UDim2.new(1, -52, 0.5, -10)
+    switchTrack.BackgroundColor3 = CONFIG[configKey] and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(231, 76, 60)
+    switchTrack.BorderSizePixel = 0
+    switchTrack.Text = ""
+    switchTrack.ZIndex = 7
+    switchTrack.Parent = frame
 
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(1, 0)
-    btnCorner.Parent = button
+    local trackCorner = Instance.new("UICorner")
+    trackCorner.CornerRadius = UDim.new(1, 0)
+    trackCorner.Parent = switchTrack
 
-    button.MouseButton1Click:Connect(function()
+    -- Переключатель Кружок
+    local circle = Instance.new("Frame")
+    circle.Size = UDim2.new(0, 16, 0, 16)
+    circle.Position = CONFIG[configKey] and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    circle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    circle.BorderSizePixel = 0
+    circle.ZIndex = 8
+    circle.Parent = switchTrack
+
+    local circleCorner = Instance.new("UICorner")
+    circleCorner.CornerRadius = UDim.new(1, 0)
+    circleCorner.Parent = circle
+
+    local function UpdateToggleVisuals(state)
+        local targetColor = state and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(231, 76, 60)
+        local targetPos = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+
+        TweenService:Create(switchTrack, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {BackgroundColor3 = targetColor}):Play()
+        TweenService:Create(circle, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
+    end
+
+    switchTrack.MouseButton1Click:Connect(function()
         CONFIG[configKey] = not CONFIG[configKey]
-        TweenService:Create(button, TweenInfo.new(0.2), {
-            BackgroundColor3 = CONFIG[configKey] and Color3.fromRGB(60, 200, 100) or Color3.fromRGB(50, 50, 60)
-        }):Play()
+        UpdateToggleVisuals(CONFIG[configKey])
+        if callback then callback(CONFIG[configKey]) end
     end)
 
     UI_BINDINGS[configKey] = {
         Set = function(val)
-            TweenService:Create(button, TweenInfo.new(0.2), {
-                BackgroundColor3 = val and Color3.fromRGB(60, 200, 100) or Color3.fromRGB(50, 50, 60)
-            }):Play()
+            UpdateToggleVisuals(val)
+            if callback then callback(val) end
         end
     }
 end
@@ -697,6 +925,7 @@ local function CreateKeybind(parent, text, configKey)
     frame.Size = UDim2.new(1, -10, 0, 32)
     frame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     frame.BorderSizePixel = 0
+    frame.ZIndex = 6
     frame.Parent = parent
 
     local corner = Instance.new("UICorner")
@@ -712,6 +941,7 @@ local function CreateKeybind(parent, text, configKey)
     label.TextColor3 = Color3.fromRGB(200, 200, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 7
     label.Parent = frame
 
     local button = Instance.new("TextButton")
@@ -723,6 +953,7 @@ local function CreateKeybind(parent, text, configKey)
     button.Text = typeof(CONFIG[configKey]) == "EnumItem" and CONFIG[configKey].Name or "None"
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
     button.TextSize = 10
+    button.ZIndex = 7
     button.Parent = frame
 
     local btnCorner = Instance.new("UICorner")
@@ -767,6 +998,7 @@ local function CreateDropdown(parent, text, options, configKey)
     frame.Size = UDim2.new(1, -10, 0, 32)
     frame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     frame.BorderSizePixel = 0
+    frame.ZIndex = 6
     frame.Parent = parent
 
     local corner = Instance.new("UICorner")
@@ -782,6 +1014,7 @@ local function CreateDropdown(parent, text, options, configKey)
     label.TextColor3 = Color3.fromRGB(200, 200, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 7
     label.Parent = frame
 
     local button = Instance.new("TextButton")
@@ -793,6 +1026,7 @@ local function CreateDropdown(parent, text, options, configKey)
     button.Text = tostring(CONFIG[configKey])
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
     button.TextSize = 10
+    button.ZIndex = 7
     button.Parent = frame
 
     local btnCorner = Instance.new("UICorner")
@@ -815,11 +1049,12 @@ local function CreateDropdown(parent, text, options, configKey)
     }
 end
 
-local function CreateSlider(parent, text, min, max, configKey)
+local function CreateSlider(parent, text, min, max, configKey, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 42)
     frame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     frame.BorderSizePixel = 0
+    frame.ZIndex = 6
     frame.Parent = parent
 
     local corner = Instance.new("UICorner")
@@ -836,6 +1071,7 @@ local function CreateSlider(parent, text, min, max, configKey)
     label.TextColor3 = Color3.fromRGB(200, 200, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 7
     label.Parent = frame
 
     local sliderBg = Instance.new("Frame")
@@ -843,6 +1079,7 @@ local function CreateSlider(parent, text, min, max, configKey)
     sliderBg.Position = UDim2.new(0, 10, 0, 26)
     sliderBg.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     sliderBg.BorderSizePixel = 0
+    sliderBg.ZIndex = 7
     sliderBg.Parent = frame
 
     local sliderBgCorner = Instance.new("UICorner")
@@ -853,6 +1090,7 @@ local function CreateSlider(parent, text, min, max, configKey)
     sliderFill.Size = UDim2.new(math.clamp((defaultVal - min) / (max - min), 0, 1), 0, 1, 0)
     sliderFill.BackgroundColor3 = Color3.fromRGB(80, 140, 255)
     sliderFill.BorderSizePixel = 0
+    sliderFill.ZIndex = 8
     sliderFill.Parent = sliderBg
 
     local sliderFillCorner = Instance.new("UICorner")
@@ -866,6 +1104,7 @@ local function CreateSlider(parent, text, min, max, configKey)
         sliderFill.Size = UDim2.new(posX, 0, 1, 0)
         label.Text = text .. ": " .. tostring(val)
         CONFIG[configKey] = val
+        if callback then callback(val) end
     end
 
     sliderBg.InputBegan:Connect(function(input)
@@ -892,6 +1131,7 @@ local function CreateSlider(parent, text, min, max, configKey)
             local posX = math.clamp((val - min) / (max - min), 0, 1)
             sliderFill.Size = UDim2.new(posX, 0, 1, 0)
             label.Text = text .. ": " .. tostring(val)
+            if callback then callback(val) end
         end
     }
 end
@@ -901,6 +1141,7 @@ local function CreateColorPicker(parent, text, configKey)
     frame.Size = UDim2.new(1, -10, 0, 32)
     frame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     frame.BorderSizePixel = 0
+    frame.ZIndex = 6
     frame.Parent = parent
 
     local corner = Instance.new("UICorner")
@@ -916,6 +1157,7 @@ local function CreateColorPicker(parent, text, configKey)
     label.TextColor3 = Color3.fromRGB(200, 200, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 7
     label.Parent = frame
 
     local previewBtn = Instance.new("TextButton")
@@ -924,6 +1166,7 @@ local function CreateColorPicker(parent, text, configKey)
     previewBtn.BackgroundColor3 = CONFIG[configKey]
     previewBtn.BorderSizePixel = 0
     previewBtn.Text = ""
+    previewBtn.ZIndex = 7
     previewBtn.Parent = frame
 
     local prevCorner = Instance.new("UICorner")
@@ -937,7 +1180,7 @@ local function CreateColorPicker(parent, text, configKey)
         local h, s, v = CONFIG[configKey]:ToHSV()
         pickerH, pickerS, pickerV = h, s, v
         
-        Canvas.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+        CanvasGradientH.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromHSV(h, 1, 1))
         CanvasCursor.Position = UDim2.new(s, 0, 1 - v, 0)
         HSCursor.Position = UDim2.new(h, 0, 0, 0)
         VSCursor.Position = UDim2.new(v, 0, 0, 0)
@@ -976,6 +1219,7 @@ local function RefreshConfigListUI(container)
         frame.Size = UDim2.new(1, -10, 0, 32)
         frame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
         frame.BorderSizePixel = 0
+        frame.ZIndex = 6
         frame.Parent = container
 
         local corner = Instance.new("UICorner")
@@ -991,6 +1235,7 @@ local function RefreshConfigListUI(container)
         label.TextColor3 = Color3.fromRGB(220, 220, 230)
         label.TextSize = 11
         label.TextXAlignment = Enum.TextXAlignment.Left
+        label.ZIndex = 7
         label.Parent = frame
 
         local loadBtn = Instance.new("TextButton")
@@ -1002,6 +1247,7 @@ local function RefreshConfigListUI(container)
         loadBtn.Text = "LOAD"
         loadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         loadBtn.TextSize = 9
+        loadBtn.ZIndex = 7
         loadBtn.Parent = frame
 
         local loadCorner = Instance.new("UICorner")
@@ -1017,6 +1263,7 @@ local function RefreshConfigListUI(container)
         delBtn.Text = "DELETE"
         delBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         delBtn.TextSize = 9
+        delBtn.ZIndex = 7
         delBtn.Parent = frame
 
         local delCorner = Instance.new("UICorner")
@@ -1025,6 +1272,7 @@ local function RefreshConfigListUI(container)
 
         loadBtn.MouseButton1Click:Connect(function()
             LoadConfigFile(name)
+            UpdateUIGradient()
         end)
 
         delBtn.MouseButton1Click:Connect(function()
@@ -1039,6 +1287,7 @@ local function BuildConfigTab(parent)
     inputFrame.Size = UDim2.new(1, -10, 0, 36)
     inputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
     inputFrame.BorderSizePixel = 0
+    inputFrame.ZIndex = 6
     inputFrame.Parent = parent
 
     local inputCorner = Instance.new("UICorner")
@@ -1055,6 +1304,7 @@ local function BuildConfigTab(parent)
     textBox.Text = ""
     textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     textBox.TextSize = 11
+    textBox.ZIndex = 7
     textBox.Parent = inputFrame
 
     local tbCorner = Instance.new("UICorner")
@@ -1070,6 +1320,7 @@ local function BuildConfigTab(parent)
     createBtn.Text = "CREATE"
     createBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     createBtn.TextSize = 10
+    createBtn.ZIndex = 7
     createBtn.Parent = inputFrame
 
     local cbCorner = Instance.new("UICorner")
@@ -1081,6 +1332,7 @@ local function BuildConfigTab(parent)
     listContainer.Size = UDim2.new(1, 0, 0, 0)
     listContainer.AutomaticSize = Enum.AutomaticSize.Y
     listContainer.BackgroundTransparency = 1
+    listContainer.ZIndex = 6
     listContainer.Parent = parent
 
     local listLayout = Instance.new("UIListLayout")
@@ -1112,10 +1364,17 @@ CreateToggle(ESPMainPage, "Show Highlight (Chams)", "ShowHighlight")
 CreateSlider(ESPMainPage, "Max Distance", 100, 3000, "MaxDistance")
 
 CreateToggle(ESPStylePage, "Enable Box Fill", "BoxFillEnabled")
-CreateToggle(ESPStylePage, "Enable Custom Gradient", "UseGradient")
+CreateToggle(ESPStylePage, "Enable Box Gradient", "UseGradient")
 CreateSlider(ESPStylePage, "Fill Transparency", 0, 1, "FillTransparency")
 CreateSlider(ESPStylePage, "Box Thickness", 1, 5, "BoxThickness")
 
+-- UI Transparency & Gradient Controls
+CreateToggle(ESPStylePage, "Enable UI Gradient", "UIGradientEnabled", function() UpdateUIGradient() end)
+CreateSlider(ESPStylePage, "UI Gradient Rotation", 0, 360, "UIGradientRotation", function() UpdateUIGradient() end)
+CreateSlider(ESPStylePage, "UI Elements Transparency", 0, 1, "UITransparency", function() UpdateUIGradient() end)
+
+CreateColorPicker(ColorsPage, "UI Gradient Color 1", "UIGradientColor1")
+CreateColorPicker(ColorsPage, "UI Gradient Color 2", "UIGradientColor2")
 CreateColorPicker(ColorsPage, "Box Border Color", "BoxColor")
 CreateColorPicker(ColorsPage, "Box Fill Color", "FillColor")
 CreateColorPicker(ColorsPage, "Player Name Color", "NameColor")
@@ -1126,7 +1385,7 @@ CreateColorPicker(ColorsPage, "FOV Circle Color", "FOVColor")
 
 -- AIMBOT SETTINGS
 CreateToggle(AimPage, "Master Aimbot", "AimEnabled")
-CreateToggle(AimPage, "Team Check (Ignore Team)", "TeamCheck")
+CreateToggle(AimPage, "Team Check (Use TeamID Attribute)", "TeamCheck")
 CreateToggle(AimPage, "Wall Check (Ignore Walls)", "WallCheck")
 CreateKeybind(AimPage, "Aim Activation Key", "AimKey")
 CreateDropdown(AimPage, "Aim Mode", {"Hold", "Toggle", "Always"}, "AimMode")
@@ -1138,14 +1397,25 @@ CreateSlider(AimPage, "Smoothness", 1, 20, "AimSmoothness")
 BuildConfigTab(ConfigPage)
 
 --------------------------------------------------
--- TEAM & WALL CHECK UTILITIES
+-- TEAM & WALL CHECK UTILITIES (UPDATED FOR TEAMID ATTRIBUTE)
 --------------------------------------------------
 
 local function IsTeammate(player)
     if not CONFIG.TeamCheck then return false end
-    if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then
-        return true
+
+    -- Чтение атрибута TeamID у обоих игроков
+    local playerTeamID = player:GetAttribute("TeamID")
+    local localTeamID = LocalPlayer:GetAttribute("TeamID")
+
+    if playerTeamID ~= nil and localTeamID ~= nil then
+        return tostring(playerTeamID) == tostring(localTeamID)
     end
+
+    -- Запасная проверка через стандартную систему команд Roblox
+    if player.Team and LocalPlayer.Team then
+        return player.Team == LocalPlayer.Team
+    end
+
     return false
 end
 
@@ -1175,7 +1445,7 @@ local function IsVisible(targetPart, character)
 end
 
 --------------------------------------------------
--- AIMBOT LOGIC & TARGET FINDER (MOUSEMOVEREL)
+-- AIMBOT LOGIC & TARGET FINDER
 --------------------------------------------------
 
 local function GetClosestPlayerInFOV()
@@ -1379,6 +1649,10 @@ for _, player in ipairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then CreateESP(player) end
 end
 
+-- Автозагрузка последнего конфига при старте
+AutoLoadLastConfig()
+UpdateUIGradient()
+
 RunService.RenderStepped:Connect(function(dt)
     -- 1. FOV CIRCLE UPDATE
     if CONFIG.ShowFOV and CONFIG.AimEnabled then
@@ -1391,7 +1665,7 @@ RunService.RenderStepped:Connect(function(dt)
         FOVCircle.Visible = false
     end
 
-    -- 2. AIMBOT LOGIC EXECUTION (MOUSEMOVEREL)
+    -- 2. AIMBOT LOGIC EXECUTION
     if IsAimActive() then
         local targetPlayer = GetClosestPlayerInFOV()
         if targetPlayer and targetPlayer.Character then
@@ -1401,10 +1675,18 @@ RunService.RenderStepped:Connect(function(dt)
                 if onScreen then
                     local mousePos = UserInputService:GetMouseLocation()
                     local targetVector = Vector2.new(screenPos.X, screenPos.Y) - mousePos
-                    local smoothFactor = math.max(CONFIG.AimSmoothness, 1)
                     
-                    if mouseMoveRel then
-                        mouseMoveRel(targetVector.X / smoothFactor, targetVector.Y / smoothFactor)
+                    if targetVector.Magnitude > 1.5 then
+                        local smoothFactor = math.clamp(CONFIG.AimSmoothness, 1, 50)
+                        local moveX = targetVector.X / smoothFactor
+                        local moveY = targetVector.Y / smoothFactor
+
+                        moveX = math.clamp(moveX, -100, 100)
+                        moveY = math.clamp(moveY, -100, 100)
+                        
+                        if mouseMoveRel then
+                            mouseMoveRel(moveX, moveY)
+                        end
                     end
                 end
             end
@@ -1413,7 +1695,7 @@ RunService.RenderStepped:Connect(function(dt)
 
     -- 3. ESP PROCESSING
     for player, data in pairs(ESPCache) do
-        if player.Parent == Players and CONFIG.ESPEnabled and player ~= LocalPlayer then
+        if player.Parent == Players and CONFIG.ESPEnabled and player ~= LocalPlayer and not IsTeammate(player) then
             local targetChar = player.Character
             if IsCharacterValid(targetChar) then
                 local hum = GetHumanoid(targetChar)
@@ -1453,7 +1735,7 @@ RunService.RenderStepped:Connect(function(dt)
                                 data.HealthBg.Visible = false
                             end
 
-                            -- Update Names & Distance (Meters rounded to tens)
+                            -- Update Names & Distance
                             if CONFIG.ShowNames then
                                 data.Name.Visible = true
                                 data.Name.Text = player.DisplayName
