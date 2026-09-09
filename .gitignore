@@ -151,7 +151,7 @@ end
 
 local function DeserializeConfig(jsonStr)
     local success, data = pcall(function()
-        return HttpService:JSONEncode(jsonStr)
+        return HttpService:JSONDecode(jsonStr)
     end)
     if not success or type(data) ~= "table" then return end
 
@@ -298,7 +298,7 @@ BackgroundFrame.Name = "BackgroundFrame"
 BackgroundFrame.Size = UDim2.new(1, 0, 1, 0)
 BackgroundFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 BackgroundFrame.BorderSizePixel = 0
-BackgroundFrame.ClipsDescendants = true -- Ограничивает обрезку за круглые края
+BackgroundFrame.ClipsDescendants = true
 BackgroundFrame.Parent = MainFrame
 
 local MainScale = Instance.new("UIScale")
@@ -329,15 +329,14 @@ local GridCanvas = Instance.new("Frame")
 GridCanvas.Name = "GridCanvas"
 GridCanvas.Size = UDim2.new(1, 0, 1, 0)
 GridCanvas.BackgroundTransparency = 1
-GridCanvas.ClipsDescendants = true -- Строго удерживает частицы внутри формы меню
+GridCanvas.ClipsDescendants = true
 GridCanvas.ZIndex = 1
 GridCanvas.Parent = BackgroundFrame
 
--- Настройка параметров для 3 слоев глубины
 local LAYER_SPECS = {
-    [1] = { count = 12, size = 4, dotAlpha = 0.8, lineBaseAlpha = 0.45, speed = 1.0, maxDist = 80, repelForce = 22 }, -- Передний
-    [2] = { count = 14, size = 3, dotAlpha = 0.5, lineBaseAlpha = 0.28, speed = 0.6, maxDist = 68, repelForce = 12 }, -- Средний
-    [3] = { count = 16, size = 2, dotAlpha = 0.25, lineBaseAlpha = 0.12, speed = 0.3, maxDist = 55, repelForce = 5 }   -- Задний
+    [1] = { count = 12, size = 4, dotAlpha = 0.8, lineBaseAlpha = 0.45, speed = 1.0, maxDist = 80, repelForce = 22 },
+    [2] = { count = 14, size = 3, dotAlpha = 0.5, lineBaseAlpha = 0.28, speed = 0.6, maxDist = 68, repelForce = 12 },
+    [3] = { count = 16, size = 2, dotAlpha = 0.25, lineBaseAlpha = 0.12, speed = 0.3, maxDist = 55, repelForce = 5 }
 }
 
 local layerNodes = {[1] = {}, [2] = {}, [3] = {}}
@@ -352,7 +351,7 @@ for layerIdx = 1, 3 do
         dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         dot.BackgroundTransparency = 1 - spec.dotAlpha
         dot.BorderSizePixel = 0
-        dot.ZIndex = 1 + (4 - layerIdx) -- Передние слои поверх задних
+        dot.ZIndex = 1 + (4 - layerIdx)
         dot.Parent = GridCanvas
 
         local dotCorner = Instance.new("UICorner")
@@ -397,14 +396,12 @@ RunService.RenderStepped:Connect(function(dt)
         local spec = LAYER_SPECS[layerIdx]
         local nodes = layerNodes[layerIdx]
 
-        -- 1. Обновление позиций внутри границ меню
         for i = 1, #nodes do
             local node = nodes[i]
 
             local px = node.PosNorm.X + node.Vel.X * dt
             local py = node.PosNorm.Y + node.Vel.Y * dt
 
-            -- Плавное отталкивание от крайних границ внутри панели
             if px < 0.03 or px > 0.97 then node.Vel = Vector2.new(-node.Vel.X, node.Vel.Y) end
             if py < 0.03 or py > 0.97 then node.Vel = Vector2.new(node.Vel.X, -node.Vel.Y) end
 
@@ -429,7 +426,6 @@ RunService.RenderStepped:Connect(function(dt)
                 offsetY = norm.Y * force
             end
 
-            -- Ограничение финальной отрисовки точки внутри Canvas
             local targetX = math.clamp(baseX + offsetX, 4, frameAbsSize.X - 4)
             local targetY = math.clamp(baseY + offsetY, 4, frameAbsSize.Y - 4)
 
@@ -437,7 +433,6 @@ RunService.RenderStepped:Connect(function(dt)
             node.Instance.Position = UDim2.fromOffset(node.Curr2D.X, node.Curr2D.Y)
         end
 
-        -- 2. Отрисовка линий слоя
         local lineIndex = 0
         for i = 1, #nodes do
             for j = i + 1, #nodes do
@@ -483,12 +478,12 @@ local function UpdateUIGradient()
     end
 end
 
--- Topbar (С полупрозрачностью)
+-- Topbar
 local Topbar = Instance.new("Frame")
 Topbar.Name = "Topbar"
 Topbar.Size = UDim2.new(1, 0, 0, 35)
 Topbar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-Topbar.BackgroundTransparency = 0.35 -- Полупрозрачный топбар
+Topbar.BackgroundTransparency = 0.35
 Topbar.BorderSizePixel = 0
 Topbar.ZIndex = 5
 Topbar.Parent = BackgroundFrame
@@ -837,12 +832,11 @@ end)
 -- PAGES & TABS SETUP
 --------------------------------------------------
 
--- Sidebar (С полупрозрачностью)
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 120, 1, -35)
 Sidebar.Position = UDim2.new(0, 0, 0, 35)
 Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-Sidebar.BackgroundTransparency = 0.4 -- Полупрозрачный сайдбар
+Sidebar.BackgroundTransparency = 0.4
 Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 5
 Sidebar.Parent = BackgroundFrame
@@ -861,7 +855,7 @@ local function CreateTabBtn(text, pos)
     btn.Size = UDim2.new(1, -10, 0, 28)
     btn.Position = UDim2.new(0, 5, 0, pos)
     btn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-    btn.BackgroundTransparency = 0.35 -- Полупрозрачные кнопки табов
+    btn.BackgroundTransparency = 0.35
     btn.BorderSizePixel = 0
     btn.Font = Enum.Font.GothamBold
     btn.Text = text
@@ -958,7 +952,7 @@ local function CreateToggle(parent, text, configKey, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 32)
     frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-    frame.BackgroundTransparency = 0.45 -- Полупрозрачные плашки параметров
+    frame.BackgroundTransparency = 0.45
     frame.BorderSizePixel = 0
     frame.ZIndex = 6
     frame.Parent = parent
@@ -1770,6 +1764,7 @@ for _, player in ipairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then CreateESP(player) end
 end
 
+-- Автозагрузка конфига вызывается после полной инициализации контролов
 AutoLoadLastConfig()
 UpdateUIGradient()
 UpdateWorldVisuals()
