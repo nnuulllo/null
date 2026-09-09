@@ -19,14 +19,11 @@ local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or 
 local mouseMoveRel = mousemoverel or (Input and Input.MouseMoveRel)
 
 if queueOnTeleport then
-    LocalPlayer.OnTeleport:Connect(function(State)
-        if State == Enum.TeleportState.Started or State == Enum.TeleportState.InProgress then
-            local scriptSource = [[
-                repeat task.wait() until game:IsLoaded()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))()
-            ]]
-            pcall(queueOnTeleport, scriptSource)
-        end
+    LocalPlayer.OnTeleport:Connect(function()
+        pcall(queueOnTeleport, [[
+            if not game:IsLoaded() then game.Loaded:Wait() end
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))()
+        ]])
     end)
 end
 
@@ -44,6 +41,7 @@ local CONFIG = {
     ShowBoxes = true,
     ShowHealth = true,
     ShowNames = true,
+    ShowWeapon = true,
     ShowHighlight = true,
     MaxDistance = 1000,
     AnimationSpeed = 30,
@@ -66,16 +64,18 @@ local CONFIG = {
     UIGradientColor2 = Color3.fromRGB(15, 15, 22),
     UITransparency = 0.15,
 
-    -- World Lighting & Atmosphere Toggles
+    -- World Lighting & Visuals
     WorldFogEnabled = true,
     WorldFogDistance = 500,
     WorldAtmosphereEnabled = true,
     WorldAtmosphereDensity = 0.3,
+    HideOtherViewModels = false,
 
     -- Text & Bar Customization
     HealthBarColor = Color3.fromRGB(80, 255, 120),
     HealthBarBg = Color3.fromRGB(20, 20, 20),
     NameColor = Color3.fromRGB(255, 255, 255),
+    WeaponColor = Color3.fromRGB(255, 215, 0),
     DistanceColor = Color3.fromRGB(190, 190, 190),
 
     -- Highlight Customization
@@ -149,6 +149,70 @@ local function UpdateWorldVisuals()
     end
 end
 
+local function ApplyViewModelHiding(model, state)
+    if model.Name == "FirstPerson" then return end
+    for _, part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") or part:IsA("Texture") or part:IsA("Decal") then
+            if state then
+                if part.Transparency < 1 and not part:GetAttribute("OriginalTransparency") then
+                    part:SetAttribute("OriginalTransparency", part.Transparency)
+                end
+                part.Transparency = 1
+            else
+                local orig = part:GetAttribute("OriginalTransparency")
+                if orig then
+                    part.Transparency = orig
+                end
+            end
+        end
+    end
+end
+
+local function UpdateViewModelsVisibility()
+    local vmFolder = workspace:FindFirstChild("ViewModels")
+    if not vmFolder then return end
+    for _, child in ipairs(vmFolder:GetChildren()) do
+        ApplyViewModelHiding(child, CONFIG.HideOtherViewModels)
+    end
+end
+
+local function SetupViewModelsListener()
+    local function hookFolder(folder)
+        folder.ChildAdded:Connect(function(child)
+            if CONFIG.HideOtherViewModels then
+                ApplyViewModelHiding(child, true)
+            end
+            child.DescendantAdded:Connect(function(descendant)
+                if CONFIG.HideOtherViewModels then
+                    if descendant:IsA("BasePart") or descendant:IsA("Texture") or descendant:IsA("Decal") then
+                        if descendant.Transparency < 1 and not descendant:GetAttribute("OriginalTransparency") then
+                            descendant:SetAttribute("OriginalTransparency", descendant.Transparency)
+                        end
+                        descendant.Transparency = 1
+                    end
+                end
+            end)
+        end)
+        for _, child in ipairs(folder:GetChildren()) do
+            if CONFIG.HideOtherViewModels then
+                ApplyViewModelHiding(child, true)
+            end
+        end
+    end
+
+    local vmFolder = workspace:FindFirstChild("ViewModels")
+    if vmFolder then
+        hookFolder(vmFolder)
+    end
+    workspace.ChildAdded:Connect(function(child)
+        if child.Name == "ViewModels" then
+            hookFolder(child)
+        end
+    end)
+end
+
+SetupViewModelsListener()
+
 local function DeserializeConfig(jsonStr)
     local success, data = pcall(function()
         return HttpService:JSONDecode(jsonStr)
@@ -175,6 +239,7 @@ local function DeserializeConfig(jsonStr)
 
     RefreshUIComponents()
     UpdateWorldVisuals()
+    UpdateViewModelsVisibility()
 end
 
 local function SaveConfigFile(name)
@@ -212,13 +277,15 @@ local function AutoLoadLastConfig()
 end
 
 local function DeleteConfigFile(name)
-    if delfile and isfile then
+    if delfile then
         local filePath = CONFIG_FOLDER .. "/" .. name .. ".json"
-        if isfile(filePath) then
+        pcall(delfile, filePath)
+        if readfile and isfile and isfile(LAST_CONFIG_FILE) then
             pcall(function()
-                delfile(filePath)
+                if readfile(LAST_CONFIG_FILE) == name then
+                    delfile(LAST_CONFIG_FILE)
+                end
             end)
-            task.wait(0.05)
         end
     end
 end
@@ -1335,7 +1402,7 @@ local function RefreshConfigListUI(container)
         corner.Parent = frame
 
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(0.5, 0, 1, 0)
+        label.Size = UDim2.new(0.4, 0, 1, 0)
         label.Position = UDim2.new(0, 10, 0, 0)
         label.BackgroundTransparency = 1
         label.Font = Enum.Font.GothamMedium
@@ -1346,8 +1413,25 @@ local function RefreshConfigListUI(container)
         label.ZIndex = 7
         label.Parent = frame
 
+        local saveBtn = Instance.new("TextButton")
+        saveBtn.Size = UDim2.new(0, 50, 0, 20)
+        saveBtn.Position = UDim2.new(1, -175, 0.5, -10)
+        saveBtn.BackgroundColor3 = Color3.fromRGB(210, 130, 30)
+        saveBtn.BackgroundTransparency = 0.2
+        saveBtn.BorderSizePixel = 0
+        saveBtn.Font = Enum.Font.GothamBold
+        saveBtn.Text = "SAVE"
+        saveBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        saveBtn.TextSize = 9
+        saveBtn.ZIndex = 7
+        saveBtn.Parent = frame
+
+        local saveCorner = Instance.new("UICorner")
+        saveCorner.CornerRadius = UDim.new(0, 4)
+        saveCorner.Parent = saveBtn
+
         local loadBtn = Instance.new("TextButton")
-        loadBtn.Size = UDim2.new(0, 55, 0, 20)
+        loadBtn.Size = UDim2.new(0, 50, 0, 20)
         loadBtn.Position = UDim2.new(1, -120, 0.5, -10)
         loadBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 70)
         loadBtn.BackgroundTransparency = 0.2
@@ -1365,7 +1449,7 @@ local function RefreshConfigListUI(container)
 
         local delBtn = Instance.new("TextButton")
         delBtn.Size = UDim2.new(0, 55, 0, 20)
-        delBtn.Position = UDim2.new(1, -60, 0.5, -10)
+        delBtn.Position = UDim2.new(1, -65, 0.5, -10)
         delBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
         delBtn.BackgroundTransparency = 0.2
         delBtn.BorderSizePixel = 0
@@ -1379,6 +1463,16 @@ local function RefreshConfigListUI(container)
         local delCorner = Instance.new("UICorner")
         delCorner.CornerRadius = UDim.new(0, 4)
         delCorner.Parent = delBtn
+
+        saveBtn.MouseButton1Click:Connect(function()
+            SaveConfigFile(name)
+            saveBtn.Text = "SAVED!"
+            task.delay(1, function()
+                if saveBtn and saveBtn.Parent then
+                    saveBtn.Text = "SAVE"
+                end
+            end)
+        end)
 
         loadBtn.MouseButton1Click:Connect(function()
             LoadConfigFile(name)
@@ -1473,6 +1567,7 @@ CreateToggle(ESPMainPage, "Master ESP Toggle", "ESPEnabled")
 CreateToggle(ESPMainPage, "Show Boxes", "ShowBoxes")
 CreateToggle(ESPMainPage, "Show Health Bars", "ShowHealth")
 CreateToggle(ESPMainPage, "Show Names & Distance", "ShowNames")
+CreateToggle(ESPMainPage, "Show Weapon & Skin", "ShowWeapon")
 CreateToggle(ESPMainPage, "Show Highlight (Chams)", "ShowHighlight")
 CreateSlider(ESPMainPage, "Max Distance", 100, 3000, "MaxDistance")
 
@@ -1484,17 +1579,26 @@ CreateToggle(ESPStylePage, "Enable UI Gradient", "UIGradientEnabled", function()
 CreateSlider(ESPStylePage, "UI Gradient Rotation", 0, 360, "UIGradientRotation", function() UpdateUIGradient() end)
 CreateSlider(ESPStylePage, "UI Background Transparency", 0, 1, "UITransparency", function() UpdateUIGradient() end)
 
--- World Lighting & Atmosphere Controls
+-- World Lighting, Atmosphere & Graphics Controls
 CreateToggle(WorldPage, "World Lighting Fog", "WorldFogEnabled", function() UpdateWorldVisuals() end)
 CreateSlider(WorldPage, "Fog Distance", 50, 5000, "WorldFogDistance", function() UpdateWorldVisuals() end)
 CreateToggle(WorldPage, "World Atmosphere", "WorldAtmosphereEnabled", function() UpdateWorldVisuals() end)
 CreateSlider(WorldPage, "Atmosphere Density", 0, 1, "WorldAtmosphereDensity", function() UpdateWorldVisuals() end)
+CreateToggle(WorldPage, "Off Other ViewModels (Parts, Decals, Textures)", "HideOtherViewModels", function(state)
+    local vmFolder = workspace:FindFirstChild("ViewModels")
+    if vmFolder then
+        for _, child in ipairs(vmFolder:GetChildren()) do
+            ApplyViewModelHiding(child, state)
+        end
+    end
+end)
 
 CreateColorPicker(ColorsPage, "UI Gradient Color 1", "UIGradientColor1")
 CreateColorPicker(ColorsPage, "UI Gradient Color 2", "UIGradientColor2")
 CreateColorPicker(ColorsPage, "Box Border Color", "BoxColor")
 CreateColorPicker(ColorsPage, "Box Fill Color", "FillColor")
 CreateColorPicker(ColorsPage, "Player Name Color", "NameColor")
+CreateColorPicker(ColorsPage, "Weapon Text Color", "WeaponColor")
 CreateColorPicker(ColorsPage, "Distance Text Color", "DistanceColor")
 CreateColorPicker(ColorsPage, "Health Bar Color", "HealthBarColor")
 CreateColorPicker(ColorsPage, "Health Bar BG Color", "HealthBarBg")
@@ -1557,6 +1661,65 @@ local function IsVisible(targetPart, character)
         return false
     end
     return true
+end
+
+local function GetPlayerEquippedWeapon(player)
+    -- Сначала ищем ViewModel именно по НИКУ игрока.
+    -- Ожидаемая структура: workspace.ViewModels/<PlayerName>/<Weapon>
+    local vmFolder = workspace:FindFirstChild("ViewModels")
+    if not vmFolder then return "None" end
+
+    local playerViewModel = vmFolder:FindFirstChild(player.Name)
+
+    -- Если имя не совпало напрямую, пробуем найти ViewModel с атрибутом Player/User/Owner.
+    if not playerViewModel then
+        for _, vm in ipairs(vmFolder:GetChildren()) do
+            local owner = vm:GetAttribute("Player") or vm:GetAttribute("User") or vm:GetAttribute("Owner") or vm:GetAttribute("PlayerName")
+            if owner and tostring(owner) == player.Name then
+                playerViewModel = vm
+                break
+            end
+        end
+    end
+
+    if not playerViewModel then return "None" end
+
+    -- После проверки ника смотрим оружие внутри ViewModel.
+    local tool = playerViewModel:FindFirstChildOfClass("Tool")
+    local weapon = tool
+
+    if not weapon then
+        for _, child in ipairs(playerViewModel:GetChildren()) do
+            if child:IsA("Model") or child:IsA("Tool") then
+                weapon = child
+                break
+            end
+        end
+    end
+
+    if not weapon then
+        local nestedTool = playerViewModel:FindFirstChildWhichIsA("Tool", true)
+        if nestedTool then weapon = nestedTool end
+    end
+
+    if not weapon then return "None" end
+
+    local fullName = weapon.Name
+    local splitParts = string.split(fullName, " - ")
+
+    -- Поддержка формата "Автор - Оружие - Скин".
+    local weaponName = splitParts[2] or splitParts[1] or fullName
+    local skinName = splitParts[3]
+
+    if not skinName and weapon.GetAttribute then
+        skinName = weapon:GetAttribute("Skin") or weapon:GetAttribute("SkinName")
+    end
+
+    if skinName and tostring(skinName) ~= "" and tostring(skinName) ~= tostring(weaponName) then
+        return tostring(weaponName) .. "\n[" .. tostring(skinName) .. "]"
+    end
+
+    return tostring(weaponName)
 end
 
 --------------------------------------------------
@@ -1702,13 +1865,25 @@ local function CreateESP(player)
     nameLabel.ZIndex = 20
     nameLabel.Parent = boxFrame
 
+    local weaponLabel = Instance.new("TextLabel")
+    weaponLabel.AnchorPoint = Vector2.new(0.5, 0)
+    weaponLabel.Position = UDim2.new(0.5, 0, 1, 2)
+    weaponLabel.Size = UDim2.fromOffset(250, 28)
+    weaponLabel.BackgroundTransparency = 1
+    weaponLabel.TextColor3 = CONFIG.WeaponColor
+    weaponLabel.TextSize = 11
+    weaponLabel.Font = Enum.Font.GothamBold
+    weaponLabel.Visible = false
+    weaponLabel.ZIndex = 20
+    weaponLabel.Parent = boxFrame
+
     local distanceLabel = Instance.new("TextLabel")
     distanceLabel.AnchorPoint = Vector2.new(0.5, 0)
-    distanceLabel.Position = UDim2.new(0.5, 0, 1, 5)
-    distanceLabel.Size = UDim2.fromOffset(250, 18)
+    distanceLabel.Position = UDim2.new(0.5, 0, 1, 32)
+    distanceLabel.Size = UDim2.fromOffset(250, 16)
     distanceLabel.BackgroundTransparency = 1
     distanceLabel.TextColor3 = CONFIG.DistanceColor
-    distanceLabel.TextSize = 11
+    distanceLabel.TextSize = 10
     distanceLabel.Font = Enum.Font.GothamMedium
     distanceLabel.Visible = false
     distanceLabel.ZIndex = 20
@@ -1730,6 +1905,7 @@ local function CreateESP(player)
         HealthBg = healthBg,
         HealthFill = healthFill,
         Name = nameLabel,
+        Weapon = weaponLabel,
         Distance = distanceLabel,
         Highlight = highlight,
         CurrentPos = nil,
@@ -1744,6 +1920,7 @@ local function HideESP(data)
     if not data then return end
     data.Box.Visible = false
     data.Name.Visible = false
+    data.Weapon.Visible = false
     data.Distance.Visible = false
     data.HealthBg.Visible = false
     if data.Highlight then data.Highlight.Enabled = false end
@@ -1764,10 +1941,10 @@ for _, player in ipairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then CreateESP(player) end
 end
 
--- Автозагрузка конфига вызывается после полной инициализации контролов
 AutoLoadLastConfig()
 UpdateUIGradient()
 UpdateWorldVisuals()
+UpdateViewModelsVisibility()
 
 RunService.RenderStepped:Connect(function(dt)
     -- 1. FOV CIRCLE UPDATE
@@ -1856,13 +2033,25 @@ RunService.RenderStepped:Connect(function(dt)
 
                                 data.Distance.Visible = true
                                 local rawMeters = dist * 0.28
-                                local tensMeters = math.floor((rawMeters + 5) / 10) * 10
-                                if tensMeters < 10 then tensMeters = 10 end
-                                data.Distance.Text = tensMeters .. "m"
+                                data.Distance.Text = string.format("%.1fm", math.clamp(rawMeters, 0.1, 9999))
                                 data.Distance.TextColor3 = CONFIG.DistanceColor
                             else
                                 data.Name.Visible = false
                                 data.Distance.Visible = false
+                            end
+
+                            if CONFIG.ShowWeapon then
+                                data.Weapon.Visible = true
+                                data.Weapon.Text = GetPlayerEquippedWeapon(player)
+                                data.Weapon.TextColor3 = CONFIG.WeaponColor
+                                if CONFIG.ShowNames then
+                                    data.Distance.Position = UDim2.new(0.5, 0, 1, 32)
+                                else
+                                    data.Distance.Position = UDim2.new(0.5, 0, 1, 2)
+                                end
+                            else
+                                data.Weapon.Visible = false
+                                data.Distance.Position = UDim2.new(0.5, 0, 1, 5)
                             end
 
                             if CONFIG.ShowHighlight then
