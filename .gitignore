@@ -13,19 +13,11 @@ local Camera = workspace.CurrentCamera
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 --------------------------------------------------
--- AUTO TELEPORT QUEUE & XENO COMPATIBILITY
+-- XENO COMPATIBILITY
+-- ВАЖНО: этот файл НЕ загружает никакие другие скрипты.
+-- GitHub loader находится отдельно.
 --------------------------------------------------
-local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or queueonteleport
 local mouseMoveRel = mousemoverel or (Input and Input.MouseMoveRel)
-
-if queueOnTeleport then
-    LocalPlayer.OnTeleport:Connect(function()
-        pcall(queueOnTeleport, [[
-            if not game:IsLoaded() then game.Loaded:Wait() end
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))()
-        ]])
-    end)
-end
 
 --------------------------------------------------
 -- CONFIGURATION & FILE SYSTEM
