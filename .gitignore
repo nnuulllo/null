@@ -1632,25 +1632,29 @@ local function ApplyInstantMovement()
     local moveDirection = humanoid.MoveDirection
 
     if not airborne then
-        -- Learn the real speed on the ground so the first airborne frame
-        -- starts from the speed the character actually had.
-        if currentSpeed > lastGroundSpeed then
-            lastGroundSpeed = currentSpeed
-        end
-        airMomentumSpeed = math.max(airMomentumSpeed, currentSpeed)
+        -- Any ground contact immediately destroys the stored air speed.
+        -- This is important: speed from a previous jump must NEVER survive
+        -- a landing, even for a single frame.
+        airMomentumSpeed = 0
+        lastGroundSpeed = currentSpeed
         return
+    end
+
+    if airMomentumSpeed <= 0 then
+        -- First airborne frame: capture only the speed that exists right now.
+        -- From this point onward, the maximum speed can only stay the same
+        -- or increase until the next ground contact.
+        airMomentumSpeed = math.max(currentSpeed, lastGroundSpeed)
     end
 
     if moveDirection.Magnitude <= 0.001 then
-        -- No input: do not touch horizontal velocity.
+        -- No input: preserve the current horizontal speed.
         airMomentumSpeed = math.max(airMomentumSpeed, currentSpeed)
         return
     end
 
-    -- Never lower the player's existing horizontal speed.
-    -- The cached value only remembers speed already reached; it is never
-    -- replaced by a lower value when the player turns/strafe/backpedals.
-    airMomentumSpeed = math.max(airMomentumSpeed, lastGroundSpeed, currentSpeed)
+    -- Never lower the maximum speed reached during THIS airborne period.
+    airMomentumSpeed = math.max(airMomentumSpeed, currentSpeed)
 
     local targetSpeed = airMomentumSpeed
     local targetVelocity = moveDirection.Unit * targetSpeed
@@ -1807,97 +1811,49 @@ local function IsVisible(targetPart, character)
     return true
 end
 
--- Find the ViewModel by the player's nickname first, then resolve the weapon inside it.
-local function FindPlayerViewModel(player)
-    if not player then return nil end
+-- Player weapon detection for ESP.
+-- workspace.ViewModels contains:
+--   <PlayerName> - <WeaponName> - <SkinName>
+-- while "FirstPerson" is the local player's own ViewModel and must be ignored.
+local function GetPlayerEquippedWeapon(player)
+    if not player then
+        return "No Weapon"
+    end
 
     local vmFolder = workspace:FindFirstChild("ViewModels")
-    if not vmFolder then return nil end
-
-    -- Primary path: ViewModels/<PlayerName>
-    local playerViewModel = vmFolder:FindFirstChild(player.Name)
-    if playerViewModel then
-        return playerViewModel
-    end
-
-    -- Fallback for games that store the nickname in an attribute.
-    for _, vm in ipairs(vmFolder:GetChildren()) do
-        local owner = vm:GetAttribute("Player")
-            or vm:GetAttribute("User")
-            or vm:GetAttribute("Owner")
-            or vm:GetAttribute("PlayerName")
-
-        if owner and tostring(owner) == player.Name then
-            return vm
-        end
-    end
-
-    return nil
-end
-
-local function FindWeaponInPlayerViewModel(playerViewModel)
-    if not playerViewModel then return nil end
-
-    -- Prefer a direct Tool/Model representing the weapon.
-    local tool = playerViewModel:FindFirstChildOfClass("Tool")
-    if tool then return tool end
-
-    for _, child in ipairs(playerViewModel:GetChildren()) do
-        if child:IsA("Model") or child:IsA("Tool") then
-            return child
-        end
-    end
-
-    -- Some ViewModels nest the actual weapon deeper.
-    local nestedTool = playerViewModel:FindFirstChildWhichIsA("Tool", true)
-    if nestedTool then return nestedTool end
-
-    local nestedModel = playerViewModel:FindFirstChildWhichIsA("Model", true)
-    if nestedModel then return nestedModel end
-
-    return nil
-end
-
-local function GetPlayerEquippedWeapon(player)
-    -- 1) Check the player's nickname.
-    local playerViewModel = FindPlayerViewModel(player)
-    if not playerViewModel then
+    if not vmFolder then
         return "No Weapon"
     end
 
-    -- 2) Only after the nickname matches, inspect that ViewModel's weapon.
-    local weapon = FindWeaponInPlayerViewModel(playerViewModel)
-    if not weapon then
-        return "No Weapon"
-    end
+    local playerName = tostring(player.Name)
+    local prefix = playerName .. " - "
 
-    -- Expected naming: Author - Weapon - Skin
-    local fullName = tostring(weapon.Name)
-    local splitParts = string.split(fullName, " - ")
+    -- Only inspect other players' ViewModels.
+    for _, viewModel in ipairs(vmFolder:GetChildren()) do
+        if viewModel.Name ~= "FirstPerson" then
+            local vmName = tostring(viewModel.Name)
 
-    local weaponName
-    local skinName
+            -- The nickname must match FIRST. Only then do we read the weapon.
+            if vmName:sub(1, #prefix) == prefix then
+                local parts = string.split(vmName, " - ")
 
-    if #splitParts >= 3 then
-        weaponName = splitParts[2]
-        skinName = splitParts[3]
-    elseif #splitParts == 2 then
-        weaponName = splitParts[2]
-    else
-        weaponName = splitParts[1] or fullName
-    end
+                -- Expected format:
+                -- PlayerName - WeaponName - SkinName
+                local weaponName = parts[2]
+                local skinName = parts[3]
 
-    pcall(function()
-        if not skinName then
-            skinName = weapon:GetAttribute("Skin") or weapon:GetAttribute("SkinName")
+                if weaponName and weaponName ~= "" then
+                    if skinName and skinName ~= "" and skinName ~= weaponName then
+                        return weaponName .. "\n[" .. skinName .. "]"
+                    end
+
+                    return weaponName
+                end
+            end
         end
-    end)
-
-    if skinName and tostring(skinName) ~= "" and tostring(skinName) ~= tostring(weaponName) then
-        return tostring(weaponName) .. "\n[" .. tostring(skinName) .. "]"
     end
 
-    return tostring(weaponName)
+    return "No Weapon"
 end
 
 --------------------------------------------------
@@ -1916,6 +1872,8 @@ local function GetObjectDisplayName(instance)
 end
 
 local function IsSupportedObject(instance)
+    -- Objects ESP is intentionally limited to the tripmine hitbox.
+    -- Player ViewModels / Energy Pistols are NOT objects here.
     return instance and instance.Parent and instance.Name == OBJECT_TRIPMINE_NAME
 end
 
