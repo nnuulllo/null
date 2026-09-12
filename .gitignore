@@ -1632,19 +1632,17 @@ local function ApplyInstantMovement()
     local moveDirection = humanoid.MoveDirection
 
     if not airborne then
-        -- Any ground contact immediately destroys the stored air speed.
-        -- This is important: speed from a previous jump must NEVER survive
-        -- a landing, even for a single frame.
+        -- Any contact with the ground completely resets the stored air speed.
+        -- Nothing from the previous jump is allowed to carry into the next one.
         airMomentumSpeed = 0
-        lastGroundSpeed = currentSpeed
+        lastGroundSpeed = 0
         return
     end
 
     if airMomentumSpeed <= 0 then
-        -- First airborne frame: capture only the speed that exists right now.
-        -- From this point onward, the maximum speed can only stay the same
-        -- or increase until the next ground contact.
-        airMomentumSpeed = math.max(currentSpeed, lastGroundSpeed)
+        -- Start a brand-new airborne period from the REAL speed at takeoff.
+        -- We intentionally do not use any speed saved from a previous jump.
+        airMomentumSpeed = currentSpeed
     end
 
     if moveDirection.Magnitude <= 0.001 then
