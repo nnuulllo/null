@@ -59,6 +59,7 @@ local CONFIG = {
 
     -- Movement
     InstantMovement = false,
+    InfiniteJump = false,
 
     -- ESP Customization
     BoxFillEnabled = true,
@@ -373,6 +374,73 @@ local FOVStroke = Instance.new("UIStroke")
 FOVStroke.Color = CONFIG.FOVColor
 FOVStroke.Thickness = CONFIG.FOVThickness
 FOVStroke.Parent = FOVCircle
+
+--------------------------------------------------
+-- AIM STATUS VISUAL
+--------------------------------------------------
+
+local AimStatusFrame = Instance.new("Frame")
+AimStatusFrame.Name = "AimStatus"
+AimStatusFrame.AnchorPoint = Vector2.new(0.5, 0)
+AimStatusFrame.Size = UDim2.fromOffset(210, 34)
+AimStatusFrame.Position = UDim2.new(0.5, 0, 0, 42)
+AimStatusFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+AimStatusFrame.BackgroundTransparency = 0.18
+AimStatusFrame.BorderSizePixel = 0
+AimStatusFrame.Visible = false
+AimStatusFrame.ZIndex = 80
+AimStatusFrame.Parent = ScreenGui
+
+local AimStatusCorner = Instance.new("UICorner")
+AimStatusCorner.CornerRadius = UDim.new(0, 9)
+AimStatusCorner.Parent = AimStatusFrame
+
+local AimStatusStroke = Instance.new("UIStroke")
+AimStatusStroke.Thickness = 1.5
+AimStatusStroke.Color = Color3.fromRGB(80, 220, 130)
+AimStatusStroke.Transparency = 0.1
+AimStatusStroke.Parent = AimStatusFrame
+
+local AimStatusDot = Instance.new("Frame")
+AimStatusDot.Size = UDim2.fromOffset(8, 8)
+AimStatusDot.Position = UDim2.new(0, 12, 0.5, -4)
+AimStatusDot.BackgroundColor3 = Color3.fromRGB(80, 220, 130)
+AimStatusDot.BorderSizePixel = 0
+AimStatusDot.ZIndex = 82
+AimStatusDot.Parent = AimStatusFrame
+
+local AimStatusDotCorner = Instance.new("UICorner")
+AimStatusDotCorner.CornerRadius = UDim.new(1, 0)
+AimStatusDotCorner.Parent = AimStatusDot
+
+local AimStatusLabel = Instance.new("TextLabel")
+AimStatusLabel.Size = UDim2.new(1, -34, 1, 0)
+AimStatusLabel.Position = UDim2.fromOffset(28, 0)
+AimStatusLabel.BackgroundTransparency = 1
+AimStatusLabel.Font = Enum.Font.GothamBold
+AimStatusLabel.Text = "AIM ACTIVE"
+AimStatusLabel.TextColor3 = Color3.fromRGB(235, 255, 240)
+AimStatusLabel.TextSize = 11
+AimStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+AimStatusLabel.ZIndex = 82
+AimStatusLabel.Parent = AimStatusFrame
+
+local function UpdateAimStatusVisual(active, targetPlayer)
+    if not active then
+        AimStatusFrame.Visible = false
+        return
+    end
+
+    AimStatusFrame.Visible = true
+    AimStatusDot.BackgroundColor3 = Color3.fromRGB(80, 220, 130)
+    AimStatusStroke.Color = Color3.fromRGB(80, 220, 130)
+
+    if targetPlayer then
+        AimStatusLabel.Text = "AIM ACTIVE  •  " .. tostring(targetPlayer.DisplayName or targetPlayer.Name)
+    else
+        AimStatusLabel.Text = "AIM ACTIVE  •  NO TARGET"
+    end
+end
 
 -- Main Window
 local MainFrame = Instance.new("Frame")
@@ -1686,6 +1754,34 @@ RunService.Stepped:Connect(function()
 end)
 
 --------------------------------------------------
+-- INFINITE JUMP
+--------------------------------------------------
+
+local infiniteJumpConnection
+
+local function SetupInfiniteJump()
+    if infiniteJumpConnection then
+        infiniteJumpConnection:Disconnect()
+        infiniteJumpConnection = nil
+    end
+
+    infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+        if not CONFIG.InfiniteJump then return end
+
+        local humanoid = GetLocalHumanoid()
+        if not humanoid or humanoid.Health <= 0 then return end
+
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end)
+end
+
+SetupInfiniteJump()
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.defer(SetupInfiniteJump)
+end)
+
+--------------------------------------------------
 -- INITIALIZE CONTROLS
 --------------------------------------------------
 
@@ -1711,6 +1807,8 @@ CreateSlider(ObjectsPage, "Object Gradient Rotation", 0, 360, "ObjectGradientRot
 CreateToggle(MovementPage, "Instant Air Movement", "InstantMovement", function()
     ApplyInstantMovement()
 end)
+
+CreateToggle(MovementPage, "Infinite Jump", "InfiniteJump")
 
 CreateToggle(ESPStylePage, "ESP Fill", "BoxFillEnabled")
 CreateToggle(ESPStylePage, "ESP Gradient", "ESPGradientEnabled")
@@ -2046,6 +2144,139 @@ UpdateObjectCache()
 -- AIMBOT LOGIC & TARGET FINDER
 --------------------------------------------------
 
+-- Finds the selected body part and, when available, the most useful
+-- Attachment inside it. The Attachment becomes the exact aim point.
+local function GetAimTargetPart(character)
+    if not character then return nil end
+
+    local targetPart = character:FindFirstChild(CONFIG.AimTargetPart)
+    if not targetPart then
+        targetPart = character:FindFirstChild("HumanoidRootPart")
+    end
+
+    if targetPart and targetPart:IsA("BasePart") then
+        return targetPart
+    end
+
+    return nil
+end
+
+local function GetAimTargetAttachment(targetPart)
+    if not targetPart then return nil end
+
+    -- Prefer conventional center/aim attachments so the muzzle lands
+    -- on the intended point rather than a random rig attachment.
+    local preferredNames = {
+        "AimAttachment",
+        "TargetAttachment",
+        "HitAttachment",
+        "FaceCenterAttachment",
+        "HeadAttachment",
+        "CenterAttachment",
+    }
+
+    for _, name in ipairs(preferredNames) do
+        local attachment = targetPart:FindFirstChild(name, true)
+        if attachment and attachment:IsA("Attachment") then
+            return attachment
+        end
+    end
+
+    -- Fallback: use the first Attachment under the selected body part.
+    local anyAttachment = targetPart:FindFirstChildWhichIsA("Attachment", true)
+    if anyAttachment then
+        return anyAttachment
+    end
+
+    return nil
+end
+
+local function GetAimTargetWorldCFrame(character)
+    local targetPart = GetAimTargetPart(character)
+    if not targetPart then
+        return nil, nil
+    end
+
+    local targetAttachment = GetAimTargetAttachment(targetPart)
+    if targetAttachment then
+        return targetAttachment.WorldCFrame, targetPart
+    end
+
+    return targetPart.CFrame, targetPart
+end
+
+--------------------------------------------------
+-- FIRST PERSON MUZZLE TARGETING
+--------------------------------------------------
+
+local function FindCurrentFirstPersonWeapon()
+    local vmFolder = workspace:FindFirstChild("ViewModels")
+    if not vmFolder then return nil end
+
+    local firstPerson = vmFolder:FindFirstChild("FirstPerson")
+    if not firstPerson then return nil end
+
+    local localName = tostring(LocalPlayer.Name)
+    local prefix = localName .. " - "
+
+    -- IMPORTANT: nickname is checked FIRST, then weapon/skin.
+    for _, obj in ipairs(firstPerson:GetChildren()) do
+        if obj.Name ~= "FirstPerson" then
+            local objectName = tostring(obj.Name)
+            if objectName:sub(1, #prefix) == prefix then
+                return obj
+            end
+        end
+    end
+
+    -- Fallback for games where the weapon model is nested deeper.
+    for _, obj in ipairs(firstPerson:GetDescendants()) do
+        local objectName = tostring(obj.Name)
+        if objectName:sub(1, #prefix) == prefix then
+            return obj
+        end
+    end
+
+    return nil
+end
+
+local function GetMuzzleAttachment()
+    local weaponModel = FindCurrentFirstPersonWeapon()
+    if not weaponModel then return nil end
+
+    local itemVisual = weaponModel:FindFirstChild("itemVisual", true)
+    if not itemVisual then return nil end
+
+    local body = itemVisual:FindFirstChild("Body", true)
+    if not body then return nil end
+
+    local bodyPrimary = body:FindFirstChild("BodyPrimary", true)
+    if not bodyPrimary or not bodyPrimary:IsA("BasePart") then
+        return nil
+    end
+
+    local muzzle = bodyPrimary:FindFirstChild("_muzzle")
+    if muzzle and muzzle:IsA("Attachment") then
+        return muzzle
+    end
+
+    return nil
+end
+
+local function MoveMuzzleToAim(targetCFrame)
+    if not targetCFrame then return end
+
+    local muzzle = GetMuzzleAttachment()
+    if not muzzle then return end
+
+    local parent = muzzle.Parent
+    if not parent or not parent:IsA("BasePart") then return end
+
+    -- Attachment.CFrame is relative to BodyPrimary.
+    -- Convert the selected player's world-space aim CFrame into that local space.
+    muzzle.CFrame = parent.CFrame:ToObjectSpace(targetCFrame)
+end
+
 local function GetClosestPlayerInFOV()
     local mousePos = UserInputService:GetMouseLocation()
     local closestPlayer = nil
@@ -2053,17 +2284,20 @@ local function GetClosestPlayerInFOV()
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and not IsTeammate(player) and player.Character then
-            local targetPart = player.Character:FindFirstChild(CONFIG.AimTargetPart) or player.Character:FindFirstChild("HumanoidRootPart")
+            local targetPart = GetAimTargetPart(player.Character)
             local hum = player.Character:FindFirstChildOfClass("Humanoid")
 
             if targetPart and hum and hum.Health > 0 then
                 if IsVisible(targetPart, player.Character) then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                        if dist < shortestDistance then
-                            shortestDistance = dist
-                            closestPlayer = player
+                    local aimCFrame = GetAimTargetWorldCFrame(player.Character)
+                    if aimCFrame then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(aimCFrame.Position)
+                        if onScreen then
+                            local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                            if dist < shortestDistance then
+                                shortestDistance = dist
+                                closestPlayer = player
+                            end
                         end
                     end
                 end
@@ -2280,12 +2514,21 @@ RunService.RenderStepped:Connect(function(dt)
     end
 
     -- 2. AIMBOT LOGIC EXECUTION
-    if IsAimActive() then
+    local aimActive = IsAimActive()
+    local activeAimTarget = nil
+
+    if aimActive then
         local targetPlayer = GetClosestPlayerInFOV()
+        activeAimTarget = targetPlayer
         if targetPlayer and targetPlayer.Character then
-            local targetPart = targetPlayer.Character:FindFirstChild(CONFIG.AimTargetPart) or targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if targetPart then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+            local aimCFrame = GetAimTargetWorldCFrame(targetPlayer.Character)
+            if aimCFrame then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(aimCFrame.Position)
+
+                -- Keep the first-person _muzzle exactly on the selected
+                -- body/Attachment while the aimbot is active.
+                MoveMuzzleToAim(aimCFrame)
+
                 if onScreen then
                     local mousePos = UserInputService:GetMouseLocation()
                     local targetVector = Vector2.new(screenPos.X, screenPos.Y) - mousePos
@@ -2306,6 +2549,8 @@ RunService.RenderStepped:Connect(function(dt)
             end
         end
     end
+
+    UpdateAimStatusVisual(aimActive, activeAimTarget)
 
     -- 3. ESP PROCESSING
     for player, data in pairs(ESPCache) do
