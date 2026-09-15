@@ -84,8 +84,8 @@ local CONFIG = {
     -- UI Main Frame Gradient & Transparency
     UIGradientEnabled = true,
     UIGradientRotation = 45,
-    UIGradientColor1 = Color3.fromRGB(28, 28, 38),
-    UIGradientColor2 = Color3.fromRGB(15, 15, 22),
+    UIGradientColor1 = Color3.fromRGB(24, 24, 24),
+    UIGradientColor2 = Color3.fromRGB(8, 8, 8),
     UITransparency = 0.15,
 
     -- World Lighting & Visuals
@@ -108,7 +108,7 @@ local CONFIG = {
 
     -- Aimbot Settings
     AimEnabled = false,
-    AimTargetPart = "Head",
+    AimTargetPart = "HitboxHead",
     AimFOV = 150,
     ShowFOV = true,
     FOVColor = Color3.fromRGB(255, 255, 255),
@@ -118,6 +118,10 @@ local CONFIG = {
     AimMode = "Hold",
     TeamCheck = true,
     WallCheck = true,
+
+    -- Aimbot Stability / Sensitivity Support
+    AimSensitivityCompensation = true,
+    AimMaxMouseStep = 18,
 }
 
 local aimToggleState = false
@@ -384,7 +388,7 @@ AimStatusFrame.Name = "AimStatus"
 AimStatusFrame.AnchorPoint = Vector2.new(0.5, 0)
 AimStatusFrame.Size = UDim2.fromOffset(210, 34)
 AimStatusFrame.Position = UDim2.new(0.5, 0, 0, 42)
-AimStatusFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+AimStatusFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 AimStatusFrame.BackgroundTransparency = 0.18
 AimStatusFrame.BorderSizePixel = 0
 AimStatusFrame.Visible = false
@@ -641,7 +645,7 @@ end
 local Topbar = Instance.new("Frame")
 Topbar.Name = "Topbar"
 Topbar.Size = UDim2.new(1, 0, 0, 35)
-Topbar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+Topbar.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 Topbar.BackgroundTransparency = 0.35
 Topbar.BorderSizePixel = 0
 Topbar.ZIndex = 5
@@ -656,12 +660,24 @@ MenuTitle.Size = UDim2.new(1, -20, 1, 0)
 MenuTitle.Position = UDim2.new(0, 12, 0, 0)
 MenuTitle.BackgroundTransparency = 1
 MenuTitle.Font = Enum.Font.GothamBold
-MenuTitle.Text = "VISION HUD // ESP"
-MenuTitle.TextColor3 = Color3.fromRGB(220, 220, 235)
+MenuTitle.Text = "VISION HUD // AIM / ESP"
+MenuTitle.TextColor3 = Color3.fromRGB(245, 245, 245)
 MenuTitle.TextSize = 11
 MenuTitle.TextXAlignment = Enum.TextXAlignment.Left
 MenuTitle.ZIndex = 6
 MenuTitle.Parent = Topbar
+
+local MenuMode = Instance.new("TextLabel")
+MenuMode.Size = UDim2.new(0, 100, 1, 0)
+MenuMode.Position = UDim2.new(1, -112, 0, 0)
+MenuMode.BackgroundTransparency = 1
+MenuMode.Font = Enum.Font.GothamSemibold
+MenuMode.Text = "CLIENT / READY"
+MenuMode.TextColor3 = Color3.fromRGB(145, 145, 145)
+MenuMode.TextSize = 9
+MenuMode.TextXAlignment = Enum.TextXAlignment.Right
+MenuMode.ZIndex = 6
+MenuMode.Parent = Topbar
 
 --------------------------------------------------
 -- DYNAMIC COLOR PICKER WINDOW
@@ -682,7 +698,7 @@ CPCorner.CornerRadius = UDim.new(0, 8)
 CPCorner.Parent = ColorPickerFrame
 
 local CPStroke = Instance.new("UIStroke")
-CPStroke.Color = Color3.fromRGB(60, 60, 80)
+CPStroke.Color = Color3.fromRGB(70, 70, 70)
 CPStroke.Thickness = 1
 CPStroke.Parent = ColorPickerFrame
 
@@ -805,7 +821,7 @@ VSCursor.Parent = ValueSlider
 local CloseCPBtn = Instance.new("TextButton")
 CloseCPBtn.Size = UDim2.new(1, -20, 0, 24)
 CloseCPBtn.Position = UDim2.new(0, 10, 0, 192)
-CloseCPBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+CloseCPBtn.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
 CloseCPBtn.BorderSizePixel = 0
 CloseCPBtn.Font = Enum.Font.GothamBold
 CloseCPBtn.Text = "APPLY COLOR"
@@ -994,7 +1010,7 @@ end)
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 135, 1, -35)
 Sidebar.Position = UDim2.new(0, 0, 0, 35)
-Sidebar.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+Sidebar.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 Sidebar.BackgroundTransparency = 0.4
 Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 5
@@ -1013,12 +1029,12 @@ local function CreateTabBtn(text, pos)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -10, 0, 28)
     btn.Position = UDim2.new(0, 5, 0, pos)
-    btn.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    btn.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
     btn.BackgroundTransparency = 0.35
     btn.BorderSizePixel = 0
     btn.Font = Enum.Font.GothamBold
     btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(180, 180, 200)
+    btn.TextColor3 = Color3.fromRGB(165, 165, 165)
     btn.TextSize = 10
     btn.ZIndex = 6
     btn.Parent = Sidebar
@@ -1029,13 +1045,13 @@ local function CreateTabBtn(text, pos)
 
     btn.MouseEnter:Connect(function()
         if currentTabBtn ~= btn then
-            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(38, 38, 50), BackgroundTransparency = 0.2, TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(42, 42, 42), BackgroundTransparency = 0.2, TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
         end
     end)
 
     btn.MouseLeave:Connect(function()
         if currentTabBtn ~= btn then
-            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(28, 28, 36), BackgroundTransparency = 0.35, TextColor3 = Color3.fromRGB(180, 180, 200)}):Play()
+            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(24, 24, 24), BackgroundTransparency = 0.35, TextColor3 = Color3.fromRGB(165, 165, 165)}):Play()
         end
     end)
 
@@ -1091,12 +1107,12 @@ local function SwitchTab(targetPage, targetBtn)
 
     for _, child in ipairs(Sidebar:GetChildren()) do
         if child:IsA("TextButton") then
-            TweenService:Create(child, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(28, 28, 36), BackgroundTransparency = 0.35, TextColor3 = Color3.fromRGB(180, 180, 200)}):Play()
+            TweenService:Create(child, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(24, 24, 24), BackgroundTransparency = 0.35, TextColor3 = Color3.fromRGB(165, 165, 165)}):Play()
         end
     end
 
     currentTabBtn = targetBtn
-    TweenService:Create(targetBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 120, 220), BackgroundTransparency = 0.15, TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+    TweenService:Create(targetBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(235, 235, 235), BackgroundTransparency = 0.08, TextColor3 = Color3.fromRGB(8, 8, 8)}):Play()
     targetPage.Visible = true
 end
 
@@ -1118,7 +1134,7 @@ SwitchTab(ESPMainPage, ESPMainBtn)
 local function CreateToggle(parent, text, configKey, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 32)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    frame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
     frame.BackgroundTransparency = 0.45
     frame.BorderSizePixel = 0
     frame.ZIndex = 6
@@ -1134,7 +1150,7 @@ local function CreateToggle(parent, text, configKey, callback)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 210)
+    label.TextColor3 = Color3.fromRGB(210, 210, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 7
@@ -1191,7 +1207,7 @@ end
 local function CreateKeybind(parent, text, configKey)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 32)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    frame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
     frame.BackgroundTransparency = 0.45
     frame.BorderSizePixel = 0
     frame.ZIndex = 6
@@ -1207,7 +1223,7 @@ local function CreateKeybind(parent, text, configKey)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 210)
+    label.TextColor3 = Color3.fromRGB(210, 210, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 7
@@ -1216,7 +1232,7 @@ local function CreateKeybind(parent, text, configKey)
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(0, 100, 0, 20)
     button.Position = UDim2.new(1, -110, 0.5, -10)
-    button.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+    button.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
     button.BackgroundTransparency = 0.3
     button.BorderSizePixel = 0
     button.Font = Enum.Font.GothamBold
@@ -1235,7 +1251,7 @@ local function CreateKeybind(parent, text, configKey)
         if listening then return end
         listening = true
         button.Text = "Press key..."
-        button.BackgroundColor3 = Color3.fromRGB(80, 80, 120)
+        button.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
 
         local conn
         conn = UserInputService.InputBegan:Connect(function(input)
@@ -1246,7 +1262,7 @@ local function CreateKeybind(parent, text, configKey)
                 CONFIG[configKey] = input.UserInputType
                 button.Text = input.UserInputType.Name
             end
-            button.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+            button.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
             listening = false
             conn:Disconnect()
         end)
@@ -1266,7 +1282,7 @@ end
 local function CreateDropdown(parent, text, options, configKey)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 32)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    frame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
     frame.BackgroundTransparency = 0.45
     frame.BorderSizePixel = 0
     frame.ZIndex = 6
@@ -1282,7 +1298,7 @@ local function CreateDropdown(parent, text, options, configKey)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 210)
+    label.TextColor3 = Color3.fromRGB(210, 210, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 7
@@ -1291,7 +1307,7 @@ local function CreateDropdown(parent, text, options, configKey)
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(0, 90, 0, 20)
     button.Position = UDim2.new(1, -100, 0.5, -10)
-    button.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+    button.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
     button.BackgroundTransparency = 0.3
     button.BorderSizePixel = 0
     button.Font = Enum.Font.GothamBold
@@ -1324,7 +1340,7 @@ end
 local function CreateSlider(parent, text, min, max, configKey, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 42)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    frame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
     frame.BackgroundTransparency = 0.45
     frame.BorderSizePixel = 0
     frame.ZIndex = 6
@@ -1341,7 +1357,7 @@ local function CreateSlider(parent, text, min, max, configKey, callback)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text .. ": " .. tostring(defaultVal)
-    label.TextColor3 = Color3.fromRGB(200, 200, 210)
+    label.TextColor3 = Color3.fromRGB(210, 210, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 7
@@ -1361,7 +1377,7 @@ local function CreateSlider(parent, text, min, max, configKey, callback)
 
     local sliderFill = Instance.new("Frame")
     sliderFill.Size = UDim2.new(math.clamp((defaultVal - min) / (max - min), 0, 1), 0, 1, 0)
-    sliderFill.BackgroundColor3 = Color3.fromRGB(80, 140, 255)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
     sliderFill.BorderSizePixel = 0
     sliderFill.ZIndex = 8
     sliderFill.Parent = sliderBg
@@ -1412,7 +1428,7 @@ end
 local function CreateColorPicker(parent, text, configKey)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 32)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    frame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
     frame.BackgroundTransparency = 0.45
     frame.BorderSizePixel = 0
     frame.ZIndex = 6
@@ -1428,7 +1444,7 @@ local function CreateColorPicker(parent, text, configKey)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 210)
+    label.TextColor3 = Color3.fromRGB(210, 210, 210)
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 7
@@ -1491,7 +1507,7 @@ local function RefreshConfigListUI(container)
         local frame = Instance.new("Frame")
         frame.Name = "ConfigItemFrame"
         frame.Size = UDim2.new(1, -10, 0, 32)
-        frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+        frame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
         frame.BackgroundTransparency = 0.45
         frame.BorderSizePixel = 0
         frame.ZIndex = 6
@@ -1589,7 +1605,7 @@ end
 local function BuildConfigTab(parent)
     local inputFrame = Instance.new("Frame")
     inputFrame.Size = UDim2.new(1, -10, 0, 36)
-    inputFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    inputFrame.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
     inputFrame.BackgroundTransparency = 0.45
     inputFrame.BorderSizePixel = 0
     inputFrame.ZIndex = 6
@@ -1602,7 +1618,7 @@ local function BuildConfigTab(parent)
     local textBox = Instance.new("TextBox")
     textBox.Size = UDim2.new(0.65, -10, 1, -10)
     textBox.Position = UDim2.new(0, 10, 0, 5)
-    textBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    textBox.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
     textBox.BackgroundTransparency = 0.3
     textBox.BorderSizePixel = 0
     textBox.Font = Enum.Font.Gotham
@@ -1854,10 +1870,12 @@ CreateToggle(AimPage, "Team Check", "TeamCheck")
 CreateToggle(AimPage, "Wall Check", "WallCheck")
 CreateKeybind(AimPage, "Aim Key", "AimKey")
 CreateDropdown(AimPage, "Aim Mode", {"Hold", "Toggle", "Always"}, "AimMode")
-CreateDropdown(AimPage, "Target Part", {"Head", "HumanoidRootPart"}, "AimTargetPart")
+CreateDropdown(AimPage, "Target Hitbox", {"HitboxHead", "HitboxBody"}, "AimTargetPart")
+CreateToggle(AimPage, "Sensitivity Compensation", "AimSensitivityCompensation")
 CreateToggle(AimPage, "FOV Circle", "ShowFOV")
 CreateSlider(AimPage, "FOV Size", 30, 500, "AimFOV")
 CreateSlider(AimPage, "Smoothness", 1, 20, "AimSmoothness")
+CreateSlider(AimPage, "Max Mouse Step", 2, 35, "AimMaxMouseStep")
 
 BuildConfigTab(ConfigPage)
 
@@ -2144,48 +2162,38 @@ UpdateObjectCache()
 -- AIMBOT LOGIC & TARGET FINDER
 --------------------------------------------------
 
--- Finds the selected body part and, when available, the most useful
--- Attachment inside it. The Attachment becomes the exact aim point.
+-- Use the game's dedicated hitboxes instead of the visual Head.
+-- Supported targets: HitboxHead and HitboxBody.
+-- The weapon muzzle is NOT modified by the aimbot.
 local function GetAimTargetPart(character)
     if not character then return nil end
 
-    local targetPart = character:FindFirstChild(CONFIG.AimTargetPart)
-    if not targetPart then
-        targetPart = character:FindFirstChild("HumanoidRootPart")
+    local preferred = CONFIG.AimTargetPart
+    local candidates
+
+    if preferred == "HitboxBody" then
+        candidates = {"HitboxBody", "HitboxHead"}
+    else
+        candidates = {"HitboxHead", "HitboxBody"}
     end
 
-    if targetPart and targetPart:IsA("BasePart") then
-        return targetPart
-    end
-
-    return nil
-end
-
-local function GetAimTargetAttachment(targetPart)
-    if not targetPart then return nil end
-
-    -- Prefer conventional center/aim attachments so the muzzle lands
-    -- on the intended point rather than a random rig attachment.
-    local preferredNames = {
-        "AimAttachment",
-        "TargetAttachment",
-        "HitAttachment",
-        "FaceCenterAttachment",
-        "HeadAttachment",
-        "CenterAttachment",
-    }
-
-    for _, name in ipairs(preferredNames) do
-        local attachment = targetPart:FindFirstChild(name, true)
-        if attachment and attachment:IsA("Attachment") then
-            return attachment
+    -- Most games store hitboxes in Character.
+    for _, name in ipairs(candidates) do
+        local part = character:FindFirstChild(name, true)
+        if part and part:IsA("BasePart") then
+            return part
         end
     end
 
-    -- Fallback: use the first Attachment under the selected body part.
-    local anyAttachment = targetPart:FindFirstChildWhichIsA("Attachment", true)
-    if anyAttachment then
-        return anyAttachment
+    -- Compatibility: some games expose hitboxes directly under the Player.
+    local player = Players:GetPlayerFromCharacter(character)
+    if player then
+        for _, name in ipairs(candidates) do
+            local part = player:FindFirstChild(name, true)
+            if part and part:IsA("BasePart") then
+                return part
+            end
+        end
     end
 
     return nil
@@ -2197,84 +2205,45 @@ local function GetAimTargetWorldCFrame(character)
         return nil, nil
     end
 
-    local targetAttachment = GetAimTargetAttachment(targetPart)
-    if targetAttachment then
-        return targetAttachment.WorldCFrame, targetPart
-    end
-
     return targetPart.CFrame, targetPart
 end
 
---------------------------------------------------
--- FIRST PERSON MUZZLE TARGETING
---------------------------------------------------
+local function GetUserMouseSensitivity()
+    if not CONFIG.AimSensitivityCompensation then
+        return 1
+    end
 
-local function FindCurrentFirstPersonWeapon()
-    local vmFolder = workspace:FindFirstChild("ViewModels")
-    if not vmFolder then return nil end
+    local ok, userGameSettings = pcall(function()
+        return UserSettings():GetService("UserGameSettings")
+    end)
 
-    local firstPerson = vmFolder:FindFirstChild("FirstPerson")
-    if not firstPerson then return nil end
+    if ok and userGameSettings then
+        local okSensitivity, sensitivity = pcall(function()
+            return tonumber(userGameSettings.MouseSensitivity)
+        end)
 
-    local localName = tostring(LocalPlayer.Name)
-    local prefix = localName .. " - "
-
-    -- IMPORTANT: nickname is checked FIRST, then weapon/skin.
-    for _, obj in ipairs(firstPerson:GetChildren()) do
-        if obj.Name ~= "FirstPerson" then
-            local objectName = tostring(obj.Name)
-            if objectName:sub(1, #prefix) == prefix then
-                return obj
-            end
+        if okSensitivity and sensitivity and sensitivity > 0 then
+            return math.clamp(sensitivity, 0.05, 20)
         end
     end
 
-    -- Fallback for games where the weapon model is nested deeper.
-    for _, obj in ipairs(firstPerson:GetDescendants()) do
-        local objectName = tostring(obj.Name)
-        if objectName:sub(1, #prefix) == prefix then
-            return obj
-        end
-    end
-
-    return nil
+    return 1
 end
 
-local function GetMuzzleAttachment()
-    local weaponModel = FindCurrentFirstPersonWeapon()
-    if not weaponModel then return nil end
+local function GetAimMouseDelta(targetVector)
+    local smoothness = math.max(tonumber(CONFIG.AimSmoothness) or 1, 0.1)
+    local sensitivity = GetUserMouseSensitivity()
 
-    local itemVisual = weaponModel:FindFirstChild("itemVisual", true)
-    if not itemVisual then return nil end
+    -- Square-root compensation keeps both low and high sensitivity stable.
+    local sensitivityScale = math.sqrt(math.clamp(sensitivity, 0.05, 20))
+    local gain = 1 / (smoothness * sensitivityScale)
 
-    local body = itemVisual:FindFirstChild("Body", true)
-    if not body then return nil end
+    local maxStep = math.clamp(tonumber(CONFIG.AimMaxMouseStep) or 18, 2, 35)
 
-    local bodyPrimary = body:FindFirstChild("BodyPrimary", true)
-    if not bodyPrimary or not bodyPrimary:IsA("BasePart") then
-        return nil
-    end
+    local moveX = math.clamp(targetVector.X * gain, -maxStep, maxStep)
+    local moveY = math.clamp(targetVector.Y * gain, -maxStep, maxStep)
 
-    local muzzle = bodyPrimary:FindFirstChild("_muzzle")
-    if muzzle and muzzle:IsA("Attachment") then
-        return muzzle
-    end
-
-    return nil
-end
-
-local function MoveMuzzleToAim(targetCFrame)
-    if not targetCFrame then return end
-
-    local muzzle = GetMuzzleAttachment()
-    if not muzzle then return end
-
-    local parent = muzzle.Parent
-    if not parent or not parent:IsA("BasePart") then return end
-
-    -- Attachment.CFrame is relative to BodyPrimary.
-    -- Convert the selected player's world-space aim CFrame into that local space.
-    muzzle.CFrame = parent.CFrame:ToObjectSpace(targetCFrame)
+    return moveX, moveY
 end
 
 local function GetClosestPlayerInFOV()
@@ -2290,10 +2259,13 @@ local function GetClosestPlayerInFOV()
             if targetPart and hum and hum.Health > 0 then
                 if IsVisible(targetPart, player.Character) then
                     local aimCFrame = GetAimTargetWorldCFrame(player.Character)
+
                     if aimCFrame then
                         local screenPos, onScreen = Camera:WorldToViewportPoint(aimCFrame.Position)
-                        if onScreen then
+
+                        if onScreen and screenPos.Z > 0 then
                             local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+
                             if dist < shortestDistance then
                                 shortestDistance = dist
                                 closestPlayer = player
@@ -2312,6 +2284,7 @@ local function IsAimActive()
     if not CONFIG.AimEnabled then return false end
     if CONFIG.AimMode == "Always" then return true end
     if CONFIG.AimMode == "Toggle" then return aimToggleState end
+
     if CONFIG.AimMode == "Hold" then
         if typeof(CONFIG.AimKey) == "EnumItem" then
             if CONFIG.AimKey.EnumType == Enum.UserInputType then
@@ -2321,6 +2294,7 @@ local function IsAimActive()
             end
         end
     end
+
     return false
 end
 
@@ -2525,25 +2499,13 @@ RunService.RenderStepped:Connect(function(dt)
             if aimCFrame then
                 local screenPos, onScreen = Camera:WorldToViewportPoint(aimCFrame.Position)
 
-                -- Keep the first-person _muzzle exactly on the selected
-                -- body/Attachment while the aimbot is active.
-                MoveMuzzleToAim(aimCFrame)
-
-                if onScreen then
+                if onScreen and mouseMoveRel then
                     local mousePos = UserInputService:GetMouseLocation()
                     local targetVector = Vector2.new(screenPos.X, screenPos.Y) - mousePos
-                    
-                    if targetVector.Magnitude > 1.5 then
-                        local smoothFactor = math.clamp(CONFIG.AimSmoothness, 1, 50)
-                        local moveX = targetVector.X / smoothFactor
-                        local moveY = targetVector.Y / smoothFactor
 
-                        moveX = math.clamp(moveX, -100, 100)
-                        moveY = math.clamp(moveY, -100, 100)
-                        
-                        if mouseMoveRel then
-                            mouseMoveRel(moveX, moveY)
-                        end
+                    if targetVector.Magnitude > 1.5 then
+                        local moveX, moveY = GetAimMouseDelta(targetVector)
+                        pcall(mouseMoveRel, moveX, moveY)
                     end
                 end
             end
